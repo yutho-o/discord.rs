@@ -39,7 +39,69 @@ impl UserPage {
 #[derive(Clone, Copy, Debug)]
 pub struct GuildsApi<'a>(pub(crate) &'a Rest);
 
+/// Which audit log entries to list. With no filter, the 50 newest.
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+pub struct AuditLogQuery {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_id: Option<UserId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    action_type: Option<dr_model::AuditLogEvent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    before: Option<dr_model::AuditLogEntryId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    after: Option<dr_model::AuditLogEntryId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    limit: Option<u8>,
+}
+
+impl AuditLogQuery {
+    /// The newest entries.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Only what this user did.
+    #[must_use]
+    pub fn user(mut self, user: UserId) -> Self {
+        self.user_id = Some(user);
+        self
+    }
+
+    /// Only this kind of action.
+    #[must_use]
+    pub fn action(mut self, action: dr_model::AuditLogEvent) -> Self {
+        self.action_type = Some(action);
+        self
+    }
+
+    /// Entries older than this one.
+    #[must_use]
+    pub fn before(mut self, entry: dr_model::AuditLogEntryId) -> Self {
+        self.before = Some(entry);
+        self
+    }
+
+    /// Entries newer than this one.
+    #[must_use]
+    pub fn after(mut self, entry: dr_model::AuditLogEntryId) -> Self {
+        self.after = Some(entry);
+        self
+    }
+
+    /// How many, 1 to 100.
+    #[must_use]
+    pub fn limit(mut self, limit: u8) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+}
+
 impl GuildsApi<'_> {
+    /// `GET /guilds/{guild}/audit-logs`. Needs `VIEW_AUDIT_LOG`.
+    pub fn get_audit_log(&self, guild: GuildId, query: AuditLogQuery) -> Request<dr_model::AuditLog> {
+        Request::new(self.0.clone(), Method::Get, routes::guild_audit_log(guild), Ok(RequestBody::empty())).query(query)
+    }
+
     /// `GET /guilds/{guild}`.
     pub fn get(&self, guild: GuildId) -> Request<Guild> {
         Request::new(self.0.clone(), Method::Get, routes::guild(guild), Ok(RequestBody::empty()))

@@ -35,6 +35,10 @@ pub enum Error {
         /// What was being waited for.
         what: &'static str,
     },
+    /// A voice connection failed.
+    #[cfg(feature = "voice")]
+    #[error(transparent)]
+    Voice(#[from] dr_voice::VoiceError),
     /// The client was set up in a way that cannot work.
     #[error(transparent)]
     Config(#[from] ConfigError),

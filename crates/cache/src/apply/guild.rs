@@ -2,7 +2,7 @@
 
 use crate::store::GuildSlot;
 use crate::{Cache, Change};
-use dr_model::{Guild, UnavailableGuild};
+use dr_model::{Emoji, Guild, GuildEmojisUpdateEvent, GuildId, GuildStickersUpdateEvent, Sticker, UnavailableGuild};
 use std::sync::Arc;
 
 /// A copy of a guild with its four lists left out, without cloning them.
@@ -11,7 +11,13 @@ fn stored_form(guild: &mut Guild) -> Guild {
     let threads = std::mem::take(&mut guild.threads);
     let members = std::mem::take(&mut guild.members);
     let roles = std::mem::take(&mut guild.roles);
+    let voice_states = std::mem::take(&mut guild.voice_states);
+    let events = std::mem::take(&mut guild.guild_scheduled_events);
+    let stages = std::mem::take(&mut guild.stage_instances);
     let stored = guild.clone();
+    guild.stage_instances = stages;
+    guild.voice_states = voice_states;
+    guild.guild_scheduled_events = events;
     guild.channels = channels;
     guild.threads = threads;
     guild.members = members;
@@ -53,6 +59,17 @@ impl Cache {
         for member in &guild.members {
             self.store_member(&slot, id, member.clone());
         }
+        for stage in &guild.stage_instances {
+            slot.stage_instances.insert(stage.channel_id, Arc::new(stage.clone()));
+        }
+        for event in &guild.guild_scheduled_events {
+            slot.scheduled_events.insert(event.id, Arc::new(event.clone()));
+        }
+        for state in &guild.voice_states {
+            let mut state = state.clone();
+            state.guild_id = Some(id);
+            slot.voice_states.insert(state.user_id, Arc::new(state));
+        }
         Arc::new(guild)
     }
 
@@ -75,6 +92,33 @@ impl Cache {
         }
         *slot.meta.write() = Some(Arc::new(stored_form(&mut guild)));
         Change { old, new: Arc::new(guild) }
+    }
+
+    /// `GUILD_EMOJIS_UPDATE`. Replaces the cached guild's emojis and returns the old ones, `None` when
+    /// the guild was not cached.
+    pub fn apply_guild_emojis_update(&self, shard: u32, event: &GuildEmojisUpdateEvent) -> Option<Vec<Emoji>> {
+        let _ = shard;
+        self.edit_guild(event.guild_id, |g| std::mem::replace(&mut g.emojis, event.emojis.clone()))
+    }
+
+    /// `GUILD_STICKERS_UPDATE`. Replaces the cached guild's stickers and returns the old ones, `None`
+    /// when the guild was not cached.
+    pub fn apply_guild_stickers_update(&self, shard: u32, event: &GuildStickersUpdateEvent) -> Option<Vec<Sticker>> {
+        let _ = shard;
+        self.edit_guild(event.guild_id, |g| std::mem::replace(&mut g.stickers, event.stickers.clone()))
+    }
+
+    /// Changes the cached guild through `f`, copying it on write. `None` when it is not cached.
+    fn edit_guild<T>(&self, guild: GuildId, f: impl FnOnce(&mut Guild) -> T) -> Option<T> {
+        if !self.config.is_enabled() {
+            return None;
+        }
+        let slot = self.guilds.get(&guild)?;
+        let mut meta = slot.meta.write();
+        let mut copy = (**meta.as_ref()?).clone();
+        let out = f(&mut copy);
+        *meta = Some(Arc::new(copy));
+        Some(out)
     }
 
     /// `GUILD_DELETE`. With `unavailable` true it is an outage, and the guild stays cached. With it

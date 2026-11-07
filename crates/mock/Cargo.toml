@@ -16,6 +16,7 @@ workspace = true
 [dependencies]
 dr-core.workspace = true
 dr-model.workspace = true
+dr-voice.workspace = true
 axum.workspace = true
 tokio-tungstenite.workspace = true
 futures.workspace = true

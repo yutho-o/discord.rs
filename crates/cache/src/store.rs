@@ -2,8 +2,8 @@
 
 use crate::{CacheConfig, Limit, Sharded, Table};
 use dr_model::{
-    Channel, ChannelId, CurrentUser, DispatchKind, Guild, GuildId, Member, Message, MessageId, Role, RoleId, User,
-    UserId,
+    Channel, ChannelId, CurrentUser, DispatchKind, Guild, GuildId, GuildScheduledEvent, Member, Message, MessageId,
+    Role, RoleId, ScheduledEventId, StageInstance, User, UserId, VoiceState,
 };
 use parking_lot::{Mutex, RwLock};
 use std::collections::VecDeque;
@@ -17,6 +17,12 @@ pub(crate) struct GuildSlot {
     pub(crate) channels: Table<ChannelId, Channel>,
     pub(crate) roles: Table<RoleId, Role>,
     pub(crate) members: Table<UserId, Member>,
+    /// Who is in a voice channel. Kept whatever the member policy, since a voice bot needs it.
+    pub(crate) voice_states: Table<UserId, VoiceState>,
+    /// Scheduled events.
+    pub(crate) scheduled_events: Table<ScheduledEventId, GuildScheduledEvent>,
+    /// Live stages, by their channel.
+    pub(crate) stage_instances: Table<ChannelId, StageInstance>,
 }
 
 /// The cached messages of one channel, oldest first.
@@ -122,6 +128,31 @@ impl Cache {
     /// A member, with its `user` and `guild_id` filled in.
     pub fn member(&self, guild: GuildId, user: UserId) -> Option<Arc<Member>> {
         self.guilds.get(&guild).and_then(|slot| slot.members.get(&user))
+    }
+
+    /// Where `user` is in voice in `guild`, if they are. Needs the `GUILD_VOICE_STATES` intent.
+    pub fn voice_state(&self, guild: GuildId, user: UserId) -> Option<Arc<VoiceState>> {
+        self.guilds.get(&guild).and_then(|slot| slot.voice_states.get(&user))
+    }
+
+    /// Everyone in a voice channel of `guild`, in no particular order.
+    pub fn guild_voice_states(&self, guild: GuildId) -> Vec<Arc<VoiceState>> {
+        self.guilds.get(&guild).map_or_else(Vec::new, |slot| slot.voice_states.snapshot())
+    }
+
+    /// A scheduled event. Needs the `GUILD_SCHEDULED_EVENTS` intent to stay current.
+    pub fn scheduled_event(&self, guild: GuildId, id: ScheduledEventId) -> Option<Arc<GuildScheduledEvent>> {
+        self.guilds.get(&guild).and_then(|slot| slot.scheduled_events.get(&id))
+    }
+
+    /// The scheduled events of `guild`, in no particular order.
+    pub fn guild_scheduled_events(&self, guild: GuildId) -> Vec<Arc<GuildScheduledEvent>> {
+        self.guilds.get(&guild).map_or_else(Vec::new, |slot| slot.scheduled_events.snapshot())
+    }
+
+    /// The live stage of a stage channel, if it is live.
+    pub fn stage_instance(&self, guild: GuildId, channel: ChannelId) -> Option<Arc<StageInstance>> {
+        self.guilds.get(&guild).and_then(|slot| slot.stage_instances.get(&channel))
     }
 
     /// A role.

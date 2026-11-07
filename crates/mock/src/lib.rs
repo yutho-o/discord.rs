@@ -7,12 +7,14 @@
 pub mod fault;
 pub mod gateway;
 pub mod rest;
+pub mod voice;
 pub mod world;
 
 pub use axum::http::Method;
 pub use fault::Fault;
 pub use gateway::{GatewayScript, RecordedFrame};
 pub use rest::{FormPart, RecordedRequest, RestRule, RestScript};
+pub use voice::{VOICE_TOKEN, VoiceFrame, VoiceScript};
 pub use world::{World, WorldEvent};
 
 use dr_core::Endpoints;
@@ -26,6 +28,7 @@ pub struct MockServer {
     world: Arc<World>,
     rest: Arc<rest::RestState>,
     gateway: Arc<gateway::GatewayState>,
+    voice: Arc<voice::VoiceState>,
     api_url: String,
     gateway_url: String,
     tasks: Vec<JoinHandle<()>>,
@@ -41,13 +44,16 @@ impl MockServer {
         let api_url = format!("http://{}/api", rest_listener.local_addr()?);
         let gateway_url = format!("ws://{}", gateway_listener.local_addr()?);
 
+        let (voice, voice_listener) = voice::VoiceState::bind().await?;
+
         let rest = Arc::new(rest::RestState::new(world.clone(), gateway_url.clone()));
-        let gateway = Arc::new(gateway::GatewayState::new(world.clone(), gateway_url.clone()));
+        let gateway = Arc::new(gateway::GatewayState::new(world.clone(), gateway_url.clone(), voice.url.clone()));
         let tasks = vec![
             tokio::spawn(rest::serve(rest_listener, rest.clone())),
             tokio::spawn(gateway::serve(gateway_listener, gateway.clone())),
+            tokio::spawn(voice::serve(voice_listener, voice.clone())),
         ];
-        Ok(Self { world, rest, gateway, api_url, gateway_url, tasks })
+        Ok(Self { world, rest, gateway, voice, api_url, gateway_url, tasks })
     }
 
     /// The URLs to hand to a client under test.
@@ -68,6 +74,11 @@ impl MockServer {
     /// Scripts gateway behaviour: `server.gateway().close(4000)`.
     pub fn gateway(&self) -> GatewayScript<'_> {
         GatewayScript::new(&self.gateway)
+    }
+
+    /// Scripts the voice server, and reads what it received: `server.voice().audio()`.
+    pub fn voice(&self) -> VoiceScript<'_> {
+        VoiceScript::new(&self.voice)
     }
 
     /// Every request received so far, in order.

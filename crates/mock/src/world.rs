@@ -23,9 +23,21 @@ struct State {
     channels: BTreeMap<u64, Value>,
     users: BTreeMap<u64, Value>,
     members: BTreeMap<(u64, u64), Value>,
+    voice_states: BTreeMap<(u64, u64), Value>,
     bans: BTreeMap<(u64, u64), Value>,
     roles: BTreeMap<(u64, u64), Value>,
     messages: BTreeMap<(u64, u64), Value>,
+    /// Who chose each answer of each poll: `(channel, message)` to answer id to users.
+    poll_votes: BTreeMap<(u64, u64), BTreeMap<u64, BTreeSet<u64>>>,
+    /// Scheduled events by `(guild, id)`, and who is interested in each: `(event, user)`.
+    scheduled_events: BTreeMap<(u64, u64), Value>,
+    event_users: BTreeSet<(u64, u64)>,
+    /// Live stages by channel.
+    stages: BTreeMap<u64, Value>,
+    /// Auto moderation rules by `(guild, id)`.
+    automod: BTreeMap<(u64, u64), Value>,
+    /// Audit log entries by `(guild, id)`.
+    audit_log: BTreeMap<(u64, u64), Value>,
     commands: BTreeMap<Option<u64>, Vec<Value>>,
     /// Webhooks by id, with their tokens.
     webhooks: BTreeMap<u64, Value>,
@@ -47,6 +59,26 @@ fn merge(target: &mut Value, body: &Value) {
             target.insert(key.clone(), value.clone());
         }
     }
+}
+
+/// The poll Discord makes of a poll request: answers numbered from 1, no votes yet. The expiry is
+/// fixed, since the mock has no clock.
+fn poll_from_request(request: &Value) -> Value {
+    let answers: Vec<Value> = request["answers"]
+        .as_array()
+        .map(|list| {
+            let numbered = list.iter().zip(1u64..);
+            numbered.map(|(a, id)| json!({"answer_id": id, "poll_media": a["poll_media"]})).collect()
+        })
+        .unwrap_or_default();
+    json!({
+        "question": request["question"],
+        "answers": answers,
+        "expiry": "2020-01-02T00:00:00.000000+00:00",
+        "allow_multiselect": request.get("allow_multiselect").cloned().unwrap_or(json!(false)),
+        "layout_type": request.get("layout_type").cloned().unwrap_or(json!(1)),
+        "results": {"is_finalized": false, "answer_counts": []},
+    })
 }
 
 /// The state both halves of the mock read. Payloads are JSON, in Discord's wire form.
@@ -136,6 +168,7 @@ impl World {
             "features": [],
             "roles": [],
             "emojis": [],
+            "stickers": [],
         });
         self.state.lock().guilds.insert(id, guild);
         GuildId::new(id)
@@ -434,9 +467,41 @@ impl World {
         guild["member_count"] = json!(members.len());
         guild["channels"] = Value::Array(channels);
         guild["members"] = Value::Array(members);
+        let voice: Vec<Value> =
+            state.voice_states.range((id.get(), 0)..=(id.get(), u64::MAX)).map(|(_, v)| v.clone()).collect();
+        guild["voice_states"] = Value::Array(voice);
+        let events: Vec<Value> =
+            state.scheduled_events.range((id.get(), 0)..=(id.get(), u64::MAX)).map(|(_, e)| e.clone()).collect();
+        guild["guild_scheduled_events"] = Value::Array(events);
+        let stages: Vec<Value> = state.stages.values().filter(|s| s["guild_id"] == json!(wanted)).cloned().collect();
+        guild["stage_instances"] = Value::Array(stages);
         guild["joined_at"] = json!("2020-01-01T00:00:00.000000+00:00");
         guild["unavailable"] = json!(false);
         Some(guild)
+    }
+
+    /// Puts `user` in a voice channel of `guild`, or out of voice with `None`. Returns the voice state
+    /// as `VOICE_STATE_UPDATE` sends it. Emits nothing: a test emits it when it wants clients to see.
+    pub fn set_voice_state(&self, guild: u64, user: u64, channel: Option<u64>, self_mute: bool) -> Value {
+        let session = format!("mock-voice-session-{}", self.next_id());
+        let state = json!({
+            "guild_id": guild.to_string(),
+            "channel_id": channel.map(|c| c.to_string()),
+            "user_id": user.to_string(),
+            "session_id": session,
+            "deaf": false,
+            "mute": false,
+            "self_deaf": false,
+            "self_mute": self_mute,
+            "self_video": false,
+            "suppress": false,
+        });
+        let mut s = self.state.lock();
+        match channel {
+            Some(_) => s.voice_states.insert((guild, user), state.clone()),
+            None => s.voice_states.remove(&(guild, user)),
+        };
+        state
     }
 
     /// A user, in wire form.
@@ -658,6 +723,7 @@ impl World {
             "mention_roles": [],
             "attachments": attachments,
             "pinned": false,
+            "poll": body.get("poll").map_or(Value::Null, poll_from_request),
         })
     }
 
@@ -680,6 +746,390 @@ impl World {
         self.state.lock().messages.insert((channel, id), message.clone());
         self.emit("MESSAGE_CREATE", message.clone());
         message
+    }
+
+    /// A user votes for an answer of a poll, or takes the vote back, and the vote event is emitted.
+    /// The stored counts follow. False when the message has no such answer or the poll ended.
+    pub fn vote(&self, channel: u64, message: u64, user: u64, answer: u64, add: bool) -> bool {
+        let guild = {
+            let mut state = self.state.lock();
+            let Some(stored) = state.messages.get(&(channel, message)) else { return false };
+            let poll = &stored["poll"];
+            let known = poll["answers"].as_array().is_some_and(|a| a.iter().any(|a| a["answer_id"] == answer));
+            if !known || poll["results"]["is_finalized"] == true {
+                return false;
+            }
+            let guild = stored.get("guild_id").cloned();
+            let votes = state.poll_votes.entry((channel, message)).or_default();
+            let voters = votes.entry(answer).or_default();
+            if add {
+                voters.insert(user);
+            } else {
+                voters.remove(&user);
+            }
+            let bot = self.bot_id.get();
+            let counts: Vec<Value> = votes
+                .iter()
+                .filter(|(_, v)| !v.is_empty())
+                .map(|(id, v)| json!({"id": id, "count": v.len(), "me_voted": v.contains(&bot)}))
+                .collect();
+            if let Some(stored) = state.messages.get_mut(&(channel, message)) {
+                stored["poll"]["results"]["answer_counts"] = Value::Array(counts);
+            }
+            guild
+        };
+        let mut event = json!({
+            "user_id": user.to_string(),
+            "channel_id": channel.to_string(),
+            "message_id": message.to_string(),
+            "answer_id": answer,
+        });
+        if let Some(guild) = guild {
+            event["guild_id"] = guild;
+        }
+        self.emit(if add { "MESSAGE_POLL_VOTE_ADD" } else { "MESSAGE_POLL_VOTE_REMOVE" }, event);
+        true
+    }
+
+    /// The users who chose an answer, after the user `after`, as `GET .../answers/{id}` lists them.
+    pub fn poll_voters(&self, channel: u64, message: u64, answer: u64, after: u64, limit: usize) -> Option<Value> {
+        let state = self.state.lock();
+        state.messages.get(&(channel, message)).filter(|m| !m["poll"].is_null())?;
+        let voters = state.poll_votes.get(&(channel, message)).and_then(|v| v.get(&answer));
+        let users: Vec<Value> = voters
+            .into_iter()
+            .flatten()
+            .filter(|u| **u > after)
+            .take(limit)
+            .map(|u| state.users.get(u).cloned().unwrap_or_else(|| json!({"id": u.to_string(), "username": "user"})))
+            .collect();
+        Some(json!({ "users": users }))
+    }
+
+    /// Ends a poll, as `POST .../expire` does, and emits `MESSAGE_UPDATE` with the final counts.
+    /// `None` when there is no such poll.
+    pub fn expire_poll(&self, channel: u64, message: u64) -> Option<Value> {
+        let ended = {
+            let mut state = self.state.lock();
+            let stored = state.messages.get_mut(&(channel, message)).filter(|m| !m["poll"].is_null())?;
+            stored["poll"]["results"]["is_finalized"] = json!(true);
+            stored.clone()
+        };
+        self.emit("MESSAGE_UPDATE", ended.clone());
+        Some(ended)
+    }
+
+    /// The emojis or stickers of a guild: `key` is `emojis` or `stickers`.
+    pub fn expressions(&self, guild: u64, key: &str) -> Option<Vec<Value>> {
+        let state = self.state.lock();
+        Some(state.guilds.get(&guild)?.get(key).and_then(Value::as_array).cloned().unwrap_or_default())
+    }
+
+    /// Changes the emojis or stickers of a guild through `f`, then emits `GUILD_EMOJIS_UPDATE` or
+    /// `GUILD_STICKERS_UPDATE` with the whole list. `None` when there is no such guild, or when `f`
+    /// gives `None`, and then nothing changes.
+    pub fn edit_expressions(
+        &self,
+        guild: u64,
+        key: &str,
+        f: impl FnOnce(&mut Vec<Value>) -> Option<Value>,
+    ) -> Option<Value> {
+        let (out, list) = {
+            let mut state = self.state.lock();
+            let stored = state.guilds.get_mut(&guild)?;
+            let mut list = stored.get(key).and_then(Value::as_array).cloned().unwrap_or_default();
+            let out = f(&mut list)?;
+            stored[key] = Value::Array(list.clone());
+            (out, list)
+        };
+        let t = if key == "emojis" { "GUILD_EMOJIS_UPDATE" } else { "GUILD_STICKERS_UPDATE" };
+        self.emit(t, json!({"guild_id": guild.to_string(), key: list}));
+        Some(out)
+    }
+
+    /// Creates a scheduled event from a request body and emits `GUILD_SCHEDULED_EVENT_CREATE`.
+    pub fn create_scheduled_event(&self, guild: u64, body: &Value) -> Option<Value> {
+        self.guild(guild)?;
+        let id = self.next_id();
+        let mut event = json!({
+            "id": id.to_string(),
+            "guild_id": guild.to_string(),
+            "channel_id": null,
+            "creator_id": self.bot_id.to_string(),
+            "creator": self.bot_user(),
+            "description": null,
+            "scheduled_end_time": null,
+            "privacy_level": 2,
+            "status": 1,
+            "entity_id": null,
+            "entity_metadata": null,
+            "image": null,
+            "recurrence_rule": null,
+        });
+        merge(&mut event, body);
+        if event.get("image").and_then(Value::as_str).is_some() {
+            event["image"] = json!(format!("{id:x}"));
+        }
+        self.state.lock().scheduled_events.insert((guild, id), event.clone());
+        self.emit("GUILD_SCHEDULED_EVENT_CREATE", event.clone());
+        Some(event)
+    }
+
+    /// A scheduled event, with its `user_count` when `with_count`.
+    pub fn scheduled_event(&self, guild: u64, id: u64, with_count: bool) -> Option<Value> {
+        let state = self.state.lock();
+        let mut event = state.scheduled_events.get(&(guild, id))?.clone();
+        if with_count {
+            event["user_count"] = json!(state.event_users.range((id, 0)..=(id, u64::MAX)).count());
+        }
+        Some(event)
+    }
+
+    /// The scheduled events of a guild.
+    pub fn scheduled_events(&self, guild: u64, with_count: bool) -> Vec<Value> {
+        let ids: Vec<u64> =
+            self.state.lock().scheduled_events.range((guild, 0)..=(guild, u64::MAX)).map(|((_, id), _)| *id).collect();
+        ids.into_iter().filter_map(|id| self.scheduled_event(guild, id, with_count)).collect()
+    }
+
+    /// Edits a scheduled event and emits `GUILD_SCHEDULED_EVENT_UPDATE`. A status change that Discord
+    /// refuses gives `Err`, and nothing changes.
+    pub fn edit_scheduled_event(&self, guild: u64, id: u64, body: &Value) -> Option<Result<Value, &'static str>> {
+        let edited = {
+            let mut state = self.state.lock();
+            let event = state.scheduled_events.get_mut(&(guild, id))?;
+            if let Some(next) = body.get("status").and_then(Value::as_u64) {
+                let allowed = matches!((event["status"].as_u64(), next), (Some(1), 2 | 4) | (Some(2), 3));
+                if !allowed {
+                    return Some(Err("Cannot update event to this status"));
+                }
+            }
+            merge(event, body);
+            event.clone()
+        };
+        self.emit("GUILD_SCHEDULED_EVENT_UPDATE", edited.clone());
+        Some(Ok(edited))
+    }
+
+    /// Deletes a scheduled event and emits `GUILD_SCHEDULED_EVENT_DELETE`.
+    pub fn delete_scheduled_event(&self, guild: u64, id: u64) -> bool {
+        let removed = self.state.lock().scheduled_events.remove(&(guild, id));
+        let Some(removed) = removed else { return false };
+        self.emit("GUILD_SCHEDULED_EVENT_DELETE", removed);
+        true
+    }
+
+    /// A user marks a scheduled event as interesting, or stops, and the matching event is emitted.
+    pub fn set_event_interest(&self, guild: u64, event: u64, user: u64, interested: bool) {
+        {
+            let mut state = self.state.lock();
+            if interested {
+                state.event_users.insert((event, user));
+            } else {
+                state.event_users.remove(&(event, user));
+            }
+        }
+        let t = if interested { "GUILD_SCHEDULED_EVENT_USER_ADD" } else { "GUILD_SCHEDULED_EVENT_USER_REMOVE" };
+        let body = json!({"guild_scheduled_event_id": event.to_string(), "user_id": user.to_string(), "guild_id": guild.to_string()});
+        self.emit(t, body);
+    }
+
+    /// The users interested in a scheduled event, after the user `after`.
+    pub fn event_users(&self, guild: u64, event: u64, after: u64, limit: usize, with_member: bool) -> Vec<Value> {
+        let state = self.state.lock();
+        let users: Vec<u64> = state
+            .event_users
+            .range((event, after.saturating_add(1))..=(event, u64::MAX))
+            .map(|(_, u)| *u)
+            .take(limit)
+            .collect();
+        users
+            .into_iter()
+            .map(|u| {
+                let user =
+                    state.users.get(&u).cloned().unwrap_or_else(|| json!({"id": u.to_string(), "username": "user"}));
+                let mut entry = json!({"guild_scheduled_event_id": event.to_string(), "user": user});
+                if with_member && let Some(member) = state.members.get(&(guild, u)) {
+                    entry["member"] = member.clone();
+                }
+                entry
+            })
+            .collect()
+    }
+
+    /// Makes a stage channel live, as `POST /stage-instances` does, and emits
+    /// `STAGE_INSTANCE_CREATE`. `Err` with Discord's code when the channel is no stage, or is live.
+    pub fn start_stage(&self, body: &Value) -> Result<Value, u32> {
+        let channel: u64 = body["channel_id"].as_str().and_then(|c| c.parse().ok()).ok_or(10003u32)?;
+        let stored = self.channel(channel).ok_or(10003u32)?;
+        if stored["type"] != 13 {
+            return Err(50024);
+        }
+        let stage = json!({
+            "id": self.next_id().to_string(),
+            "guild_id": stored["guild_id"],
+            "channel_id": channel.to_string(),
+            "topic": body["topic"],
+            "privacy_level": body.get("privacy_level").cloned().unwrap_or(json!(2)),
+            "discoverable_disabled": true,
+            "guild_scheduled_event_id": body.get("guild_scheduled_event_id").cloned().unwrap_or(Value::Null),
+        });
+        {
+            let mut state = self.state.lock();
+            if state.stages.contains_key(&channel) {
+                return Err(150006);
+            }
+            state.stages.insert(channel, stage.clone());
+        }
+        self.emit("STAGE_INSTANCE_CREATE", stage.clone());
+        Ok(stage)
+    }
+
+    /// The live stage of a channel.
+    pub fn stage(&self, channel: u64) -> Option<Value> {
+        self.state.lock().stages.get(&channel).cloned()
+    }
+
+    /// Edits a live stage and emits `STAGE_INSTANCE_UPDATE`.
+    pub fn edit_stage(&self, channel: u64, body: &Value) -> Option<Value> {
+        let edited = {
+            let mut state = self.state.lock();
+            let stage = state.stages.get_mut(&channel)?;
+            merge(stage, body);
+            stage.clone()
+        };
+        self.emit("STAGE_INSTANCE_UPDATE", edited.clone());
+        Some(edited)
+    }
+
+    /// Ends a live stage and emits `STAGE_INSTANCE_DELETE`.
+    pub fn end_stage(&self, channel: u64) -> bool {
+        let removed = self.state.lock().stages.remove(&channel);
+        let Some(removed) = removed else { return false };
+        self.emit("STAGE_INSTANCE_DELETE", removed);
+        true
+    }
+
+    /// Adds a stage channel to a guild. Emits nothing.
+    pub fn add_stage_channel(&self, guild: GuildId, name: &str) -> ChannelId {
+        let id = self.next_id();
+        let channel = json!({"id": id.to_string(), "type": 13, "guild_id": guild.to_string(), "name": name});
+        self.state.lock().channels.insert(id, channel);
+        ChannelId::new(id)
+    }
+
+    /// Creates an auto moderation rule and emits `AUTO_MODERATION_RULE_CREATE`. `None` without such
+    /// a guild. A second spam, preset or mention spam rule gives `Some(Err(..))`, as on Discord.
+    pub fn create_automod_rule(&self, guild: u64, body: &Value) -> Option<Result<Value, &'static str>> {
+        self.guild(guild)?;
+        let trigger = body["trigger_type"].as_u64();
+        let once = matches!(trigger, Some(3..=5));
+        let id = self.next_id();
+        let mut rule = json!({
+            "id": id.to_string(),
+            "guild_id": guild.to_string(),
+            "creator_id": self.bot_id.to_string(),
+            "trigger_metadata": {},
+            "enabled": false,
+            "exempt_roles": [],
+            "exempt_channels": [],
+        });
+        merge(&mut rule, body);
+        {
+            let mut state = self.state.lock();
+            let taken =
+                state.automod.range((guild, 0)..=(guild, u64::MAX)).any(|(_, r)| r["trigger_type"].as_u64() == trigger);
+            if once && taken {
+                return Some(Err("Maximum number of rules of this type reached"));
+            }
+            state.automod.insert((guild, id), rule.clone());
+        }
+        self.emit("AUTO_MODERATION_RULE_CREATE", rule.clone());
+        Some(Ok(rule))
+    }
+
+    /// An auto moderation rule.
+    pub fn automod_rule(&self, guild: u64, id: u64) -> Option<Value> {
+        self.state.lock().automod.get(&(guild, id)).cloned()
+    }
+
+    /// The auto moderation rules of a guild.
+    pub fn automod_rules(&self, guild: u64) -> Vec<Value> {
+        self.state.lock().automod.range((guild, 0)..=(guild, u64::MAX)).map(|(_, r)| r.clone()).collect()
+    }
+
+    /// Edits a rule and emits `AUTO_MODERATION_RULE_UPDATE`.
+    pub fn edit_automod_rule(&self, guild: u64, id: u64, body: &Value) -> Option<Value> {
+        let edited = {
+            let mut state = self.state.lock();
+            let rule = state.automod.get_mut(&(guild, id))?;
+            merge(rule, body);
+            rule.clone()
+        };
+        self.emit("AUTO_MODERATION_RULE_UPDATE", edited.clone());
+        Some(edited)
+    }
+
+    /// Deletes a rule and emits `AUTO_MODERATION_RULE_DELETE`.
+    pub fn delete_automod_rule(&self, guild: u64, id: u64) -> bool {
+        let removed = self.state.lock().automod.remove(&(guild, id));
+        let Some(removed) = removed else { return false };
+        self.emit("AUTO_MODERATION_RULE_DELETE", removed);
+        true
+    }
+
+    /// Records an audit log entry and emits `GUILD_AUDIT_LOG_ENTRY_CREATE`. Returns its id.
+    pub fn add_audit_entry(&self, guild: u64, action: u16, user: u64, target: Option<u64>, changes: Value) -> u64 {
+        let id = self.next_id();
+        let entry = json!({
+            "id": id.to_string(),
+            "action_type": action,
+            "user_id": user.to_string(),
+            "target_id": target.map(|t| t.to_string()),
+            "changes": changes,
+        });
+        self.state.lock().audit_log.insert((guild, id), entry.clone());
+        let mut event = entry;
+        event["guild_id"] = json!(guild.to_string());
+        self.emit("GUILD_AUDIT_LOG_ENTRY_CREATE", event);
+        id
+    }
+
+    /// The audit log of a guild as `GET /guilds/{id}/audit-logs` answers it, newest first, with the
+    /// users the entries name.
+    pub fn audit_log(
+        &self,
+        guild: u64,
+        user: Option<u64>,
+        action: Option<u64>,
+        before: Option<u64>,
+        limit: usize,
+    ) -> Value {
+        let state = self.state.lock();
+        let entries: Vec<Value> = state
+            .audit_log
+            .range((guild, 0)..(guild, before.unwrap_or(u64::MAX)))
+            .rev()
+            .map(|(_, e)| e)
+            .filter(|e| user.is_none_or(|u| e["user_id"] == json!(u.to_string())))
+            .filter(|e| action.is_none_or(|a| e["action_type"] == json!(a)))
+            .take(limit)
+            .cloned()
+            .collect();
+        let mut ids: Vec<u64> = entries.iter().filter_map(|e| e["user_id"].as_str()?.parse().ok()).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        let users: Vec<Value> = ids.iter().filter_map(|u| state.users.get(u).cloned()).collect();
+        json!({
+            "audit_log_entries": entries,
+            "users": users,
+            "webhooks": [],
+            "threads": [],
+            "guild_scheduled_events": [],
+            "auto_moderation_rules": [],
+            "application_commands": [],
+            "integrations": [],
+        })
     }
 
     /// A stored message.

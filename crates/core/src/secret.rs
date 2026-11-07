@@ -7,7 +7,7 @@ use std::fmt;
 ///
 /// `Serialize` writes the real value, since this type is what goes into an identify payload. Only
 /// put it in a struct that is sent to Discord, never in one that is logged as JSON.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct Secret(Box<str>);
 
 impl Secret {

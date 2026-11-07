@@ -16,6 +16,8 @@ workspace = true
 [features]
 default = ["zlib"]
 zlib = ["dr-gateway/zlib"]
+# Voice channels: joining, Opus playback, receiving, and DAVE end-to-end encryption.
+voice = ["dep:dr-voice", "dr-voice/dave"]
 
 [dependencies]
 dr-core.workspace = true
@@ -24,6 +26,7 @@ dr-builders.workspace = true
 dr-rest.workspace = true
 dr-gateway.workspace = true
 dr-cache.workspace = true
+dr-voice = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 futures.workspace = true
@@ -38,3 +41,7 @@ compact_str.workspace = true
 dr-mock.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "signal", "test-util"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "fmt"] }
+
+[[example]]
+name = "voice_bot"
+required-features = ["voice"]

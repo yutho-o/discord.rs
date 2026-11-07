@@ -5,11 +5,13 @@
 //! other event reaches [`Dispatch::Unknown`] with its name and raw JSON, and is not lost.
 
 use crate::{
-    ApplicationFlags, ApplicationId, Attachment, AvatarDecorationData, Channel, ChannelId, ChannelMention, ChannelType,
-    Collectibles, Component, Embed, Emoji, Guild, GuildId, GuildMemberFlags, Interaction, Member, Message,
+    ApplicationFlags, ApplicationId, Attachment, AuditLogEntryCreateEvent, AutoModActionExecutionEvent, AutoModRule,
+    AvatarDecorationData, Channel, ChannelId, ChannelMention, ChannelType, Collectibles, Component, Embed, Emoji,
+    Guild, GuildId, GuildMemberFlags, GuildScheduledEvent, GuildStickersUpdateEvent, Interaction, Member, Message,
     MessageActivity, MessageCall, MessageFlags, MessageId, MessageInteraction, MessageInteractionMetadata,
-    MessageReference, MessageSharedClientTheme, MessageSnapshot, MessageType, Nonce, Reaction, ResolvedData, Role,
-    RoleId, ThreadMember, UnavailableGuild, User, UserId, WebhookId,
+    MessagePollVoteEvent, MessageReference, MessageSharedClientTheme, MessageSnapshot, MessageType, Nonce, Reaction,
+    ResolvedData, Role, RoleId, ScheduledEventUserEvent, StageInstance, ThreadMember, UnavailableGuild, User, UserId,
+    VoiceServerUpdateEvent, VoiceState, WebhookId,
 };
 use dr_core::{DecodeError, Patch, Secret, Timestamp, decode, null_default};
 use serde::de::{Deserializer, Error as DeError, Visitor};
@@ -124,13 +126,32 @@ pub enum DispatchKind {
     ThreadMembersUpdate,
     WebhooksUpdate,
     GuildMembersChunk,
+    VoiceStateUpdate,
+    VoiceServerUpdate,
+    MessagePollVoteAdd,
+    MessagePollVoteRemove,
+    GuildEmojisUpdate,
+    GuildStickersUpdate,
+    GuildScheduledEventCreate,
+    GuildScheduledEventUpdate,
+    GuildScheduledEventDelete,
+    GuildScheduledEventUserAdd,
+    GuildScheduledEventUserRemove,
+    StageInstanceCreate,
+    StageInstanceUpdate,
+    StageInstanceDelete,
+    AutoModerationRuleCreate,
+    AutoModerationRuleUpdate,
+    AutoModerationRuleDelete,
+    AutoModerationActionExecution,
+    GuildAuditLogEntryCreate,
     /// Any event name this build does not know.
     Unknown,
 }
 
 impl DispatchKind {
     /// Number of kinds, the size of a table indexed by [`DispatchKind::index`].
-    pub const COUNT: usize = 34;
+    pub const COUNT: usize = 53;
 
     /// Every kind, in [`DispatchKind::index`] order.
     pub const ALL: [Self; Self::COUNT] = [
@@ -167,6 +188,25 @@ impl DispatchKind {
         Self::ThreadMembersUpdate,
         Self::WebhooksUpdate,
         Self::GuildMembersChunk,
+        Self::VoiceStateUpdate,
+        Self::VoiceServerUpdate,
+        Self::MessagePollVoteAdd,
+        Self::MessagePollVoteRemove,
+        Self::GuildEmojisUpdate,
+        Self::GuildStickersUpdate,
+        Self::GuildScheduledEventCreate,
+        Self::GuildScheduledEventUpdate,
+        Self::GuildScheduledEventDelete,
+        Self::GuildScheduledEventUserAdd,
+        Self::GuildScheduledEventUserRemove,
+        Self::StageInstanceCreate,
+        Self::StageInstanceUpdate,
+        Self::StageInstanceDelete,
+        Self::AutoModerationRuleCreate,
+        Self::AutoModerationRuleUpdate,
+        Self::AutoModerationRuleDelete,
+        Self::AutoModerationActionExecution,
+        Self::GuildAuditLogEntryCreate,
         Self::Unknown,
     ];
 
@@ -206,6 +246,25 @@ impl DispatchKind {
             "THREAD_MEMBERS_UPDATE" => Self::ThreadMembersUpdate,
             "WEBHOOKS_UPDATE" => Self::WebhooksUpdate,
             "GUILD_MEMBERS_CHUNK" => Self::GuildMembersChunk,
+            "VOICE_STATE_UPDATE" => Self::VoiceStateUpdate,
+            "VOICE_SERVER_UPDATE" => Self::VoiceServerUpdate,
+            "MESSAGE_POLL_VOTE_ADD" => Self::MessagePollVoteAdd,
+            "MESSAGE_POLL_VOTE_REMOVE" => Self::MessagePollVoteRemove,
+            "GUILD_EMOJIS_UPDATE" => Self::GuildEmojisUpdate,
+            "GUILD_STICKERS_UPDATE" => Self::GuildStickersUpdate,
+            "GUILD_SCHEDULED_EVENT_CREATE" => Self::GuildScheduledEventCreate,
+            "GUILD_SCHEDULED_EVENT_UPDATE" => Self::GuildScheduledEventUpdate,
+            "GUILD_SCHEDULED_EVENT_DELETE" => Self::GuildScheduledEventDelete,
+            "GUILD_SCHEDULED_EVENT_USER_ADD" => Self::GuildScheduledEventUserAdd,
+            "GUILD_SCHEDULED_EVENT_USER_REMOVE" => Self::GuildScheduledEventUserRemove,
+            "STAGE_INSTANCE_CREATE" => Self::StageInstanceCreate,
+            "STAGE_INSTANCE_UPDATE" => Self::StageInstanceUpdate,
+            "STAGE_INSTANCE_DELETE" => Self::StageInstanceDelete,
+            "AUTO_MODERATION_RULE_CREATE" => Self::AutoModerationRuleCreate,
+            "AUTO_MODERATION_RULE_UPDATE" => Self::AutoModerationRuleUpdate,
+            "AUTO_MODERATION_RULE_DELETE" => Self::AutoModerationRuleDelete,
+            "AUTO_MODERATION_ACTION_EXECUTION" => Self::AutoModerationActionExecution,
+            "GUILD_AUDIT_LOG_ENTRY_CREATE" => Self::GuildAuditLogEntryCreate,
             _ => Self::Unknown,
         }
     }
@@ -246,6 +305,25 @@ impl DispatchKind {
             Self::ThreadMembersUpdate => "THREAD_MEMBERS_UPDATE",
             Self::WebhooksUpdate => "WEBHOOKS_UPDATE",
             Self::GuildMembersChunk => "GUILD_MEMBERS_CHUNK",
+            Self::VoiceStateUpdate => "VOICE_STATE_UPDATE",
+            Self::VoiceServerUpdate => "VOICE_SERVER_UPDATE",
+            Self::MessagePollVoteAdd => "MESSAGE_POLL_VOTE_ADD",
+            Self::MessagePollVoteRemove => "MESSAGE_POLL_VOTE_REMOVE",
+            Self::GuildEmojisUpdate => "GUILD_EMOJIS_UPDATE",
+            Self::GuildStickersUpdate => "GUILD_STICKERS_UPDATE",
+            Self::GuildScheduledEventCreate => "GUILD_SCHEDULED_EVENT_CREATE",
+            Self::GuildScheduledEventUpdate => "GUILD_SCHEDULED_EVENT_UPDATE",
+            Self::GuildScheduledEventDelete => "GUILD_SCHEDULED_EVENT_DELETE",
+            Self::GuildScheduledEventUserAdd => "GUILD_SCHEDULED_EVENT_USER_ADD",
+            Self::GuildScheduledEventUserRemove => "GUILD_SCHEDULED_EVENT_USER_REMOVE",
+            Self::StageInstanceCreate => "STAGE_INSTANCE_CREATE",
+            Self::StageInstanceUpdate => "STAGE_INSTANCE_UPDATE",
+            Self::StageInstanceDelete => "STAGE_INSTANCE_DELETE",
+            Self::AutoModerationRuleCreate => "AUTO_MODERATION_RULE_CREATE",
+            Self::AutoModerationRuleUpdate => "AUTO_MODERATION_RULE_UPDATE",
+            Self::AutoModerationRuleDelete => "AUTO_MODERATION_RULE_DELETE",
+            Self::AutoModerationActionExecution => "AUTO_MODERATION_ACTION_EXECUTION",
+            Self::GuildAuditLogEntryCreate => "GUILD_AUDIT_LOG_ENTRY_CREATE",
             Self::Unknown => return None,
         })
     }
@@ -300,6 +378,25 @@ pub enum Dispatch {
     ThreadMembersUpdate(Box<ThreadMembersUpdateEvent>),
     WebhooksUpdate(Box<WebhooksUpdateEvent>),
     GuildMembersChunk(Box<GuildMembersChunkEvent>),
+    VoiceStateUpdate(Box<VoiceState>),
+    VoiceServerUpdate(Box<VoiceServerUpdateEvent>),
+    MessagePollVoteAdd(Box<MessagePollVoteEvent>),
+    MessagePollVoteRemove(Box<MessagePollVoteEvent>),
+    GuildEmojisUpdate(Box<GuildEmojisUpdateEvent>),
+    GuildStickersUpdate(Box<GuildStickersUpdateEvent>),
+    GuildScheduledEventCreate(Box<GuildScheduledEvent>),
+    GuildScheduledEventUpdate(Box<GuildScheduledEvent>),
+    GuildScheduledEventDelete(Box<GuildScheduledEvent>),
+    GuildScheduledEventUserAdd(Box<ScheduledEventUserEvent>),
+    GuildScheduledEventUserRemove(Box<ScheduledEventUserEvent>),
+    StageInstanceCreate(Box<StageInstance>),
+    StageInstanceUpdate(Box<StageInstance>),
+    StageInstanceDelete(Box<StageInstance>),
+    AutoModerationRuleCreate(Box<AutoModRule>),
+    AutoModerationRuleUpdate(Box<AutoModRule>),
+    AutoModerationRuleDelete(Box<AutoModRule>),
+    AutoModerationActionExecution(Box<AutoModActionExecutionEvent>),
+    GuildAuditLogEntryCreate(Box<AuditLogEntryCreateEvent>),
     /// An event with no typed arm. Keeps its name and raw JSON.
     Unknown {
         /// Event name.
@@ -348,6 +445,25 @@ impl Dispatch {
             DispatchKind::ThreadMembersUpdate => Self::ThreadMembersUpdate(decode(d)?),
             DispatchKind::WebhooksUpdate => Self::WebhooksUpdate(decode(d)?),
             DispatchKind::GuildMembersChunk => Self::GuildMembersChunk(decode(d)?),
+            DispatchKind::VoiceStateUpdate => Self::VoiceStateUpdate(decode(d)?),
+            DispatchKind::VoiceServerUpdate => Self::VoiceServerUpdate(decode(d)?),
+            DispatchKind::MessagePollVoteAdd => Self::MessagePollVoteAdd(decode(d)?),
+            DispatchKind::MessagePollVoteRemove => Self::MessagePollVoteRemove(decode(d)?),
+            DispatchKind::GuildEmojisUpdate => Self::GuildEmojisUpdate(decode(d)?),
+            DispatchKind::GuildStickersUpdate => Self::GuildStickersUpdate(decode(d)?),
+            DispatchKind::GuildScheduledEventCreate => Self::GuildScheduledEventCreate(decode(d)?),
+            DispatchKind::GuildScheduledEventUpdate => Self::GuildScheduledEventUpdate(decode(d)?),
+            DispatchKind::GuildScheduledEventDelete => Self::GuildScheduledEventDelete(decode(d)?),
+            DispatchKind::GuildScheduledEventUserAdd => Self::GuildScheduledEventUserAdd(decode(d)?),
+            DispatchKind::GuildScheduledEventUserRemove => Self::GuildScheduledEventUserRemove(decode(d)?),
+            DispatchKind::StageInstanceCreate => Self::StageInstanceCreate(decode(d)?),
+            DispatchKind::StageInstanceUpdate => Self::StageInstanceUpdate(decode(d)?),
+            DispatchKind::StageInstanceDelete => Self::StageInstanceDelete(decode(d)?),
+            DispatchKind::AutoModerationRuleCreate => Self::AutoModerationRuleCreate(decode(d)?),
+            DispatchKind::AutoModerationRuleUpdate => Self::AutoModerationRuleUpdate(decode(d)?),
+            DispatchKind::AutoModerationRuleDelete => Self::AutoModerationRuleDelete(decode(d)?),
+            DispatchKind::AutoModerationActionExecution => Self::AutoModerationActionExecution(decode(d)?),
+            DispatchKind::GuildAuditLogEntryCreate => Self::GuildAuditLogEntryCreate(decode(d)?),
             DispatchKind::TypingStart | DispatchKind::PresenceUpdate | DispatchKind::Unknown => {
                 let raw = if d.is_empty() { RawValue::NULL.to_owned() } else { decode(d)? };
                 Self::Unknown { t: t.to_owned(), raw }
@@ -390,6 +506,25 @@ impl Dispatch {
             Self::ThreadMembersUpdate(_) => DispatchKind::ThreadMembersUpdate,
             Self::WebhooksUpdate(_) => DispatchKind::WebhooksUpdate,
             Self::GuildMembersChunk(_) => DispatchKind::GuildMembersChunk,
+            Self::VoiceStateUpdate(_) => DispatchKind::VoiceStateUpdate,
+            Self::VoiceServerUpdate(_) => DispatchKind::VoiceServerUpdate,
+            Self::MessagePollVoteAdd(_) => DispatchKind::MessagePollVoteAdd,
+            Self::MessagePollVoteRemove(_) => DispatchKind::MessagePollVoteRemove,
+            Self::GuildEmojisUpdate(_) => DispatchKind::GuildEmojisUpdate,
+            Self::GuildStickersUpdate(_) => DispatchKind::GuildStickersUpdate,
+            Self::GuildScheduledEventCreate(_) => DispatchKind::GuildScheduledEventCreate,
+            Self::GuildScheduledEventUpdate(_) => DispatchKind::GuildScheduledEventUpdate,
+            Self::GuildScheduledEventDelete(_) => DispatchKind::GuildScheduledEventDelete,
+            Self::GuildScheduledEventUserAdd(_) => DispatchKind::GuildScheduledEventUserAdd,
+            Self::GuildScheduledEventUserRemove(_) => DispatchKind::GuildScheduledEventUserRemove,
+            Self::StageInstanceCreate(_) => DispatchKind::StageInstanceCreate,
+            Self::StageInstanceUpdate(_) => DispatchKind::StageInstanceUpdate,
+            Self::StageInstanceDelete(_) => DispatchKind::StageInstanceDelete,
+            Self::AutoModerationRuleCreate(_) => DispatchKind::AutoModerationRuleCreate,
+            Self::AutoModerationRuleUpdate(_) => DispatchKind::AutoModerationRuleUpdate,
+            Self::AutoModerationRuleDelete(_) => DispatchKind::AutoModerationRuleDelete,
+            Self::AutoModerationActionExecution(_) => DispatchKind::AutoModerationActionExecution,
+            Self::GuildAuditLogEntryCreate(_) => DispatchKind::GuildAuditLogEntryCreate,
             Self::Unknown { t, .. } => DispatchKind::from_t(t),
         }
     }
@@ -445,6 +580,25 @@ impl fmt::Debug for Dispatch {
             Self::ThreadMembersUpdate(v) => arm(f, "ThreadMembersUpdate", v),
             Self::WebhooksUpdate(v) => arm(f, "WebhooksUpdate", v),
             Self::GuildMembersChunk(v) => arm(f, "GuildMembersChunk", v),
+            Self::VoiceStateUpdate(v) => arm(f, "VoiceStateUpdate", v),
+            Self::VoiceServerUpdate(v) => arm(f, "VoiceServerUpdate", v),
+            Self::MessagePollVoteAdd(v) => arm(f, "MessagePollVoteAdd", v),
+            Self::MessagePollVoteRemove(v) => arm(f, "MessagePollVoteRemove", v),
+            Self::GuildEmojisUpdate(v) => arm(f, "GuildEmojisUpdate", v),
+            Self::GuildStickersUpdate(v) => arm(f, "GuildStickersUpdate", v),
+            Self::GuildScheduledEventCreate(v) => arm(f, "GuildScheduledEventCreate", v),
+            Self::GuildScheduledEventUpdate(v) => arm(f, "GuildScheduledEventUpdate", v),
+            Self::GuildScheduledEventDelete(v) => arm(f, "GuildScheduledEventDelete", v),
+            Self::GuildScheduledEventUserAdd(v) => arm(f, "GuildScheduledEventUserAdd", v),
+            Self::GuildScheduledEventUserRemove(v) => arm(f, "GuildScheduledEventUserRemove", v),
+            Self::StageInstanceCreate(v) => arm(f, "StageInstanceCreate", v),
+            Self::StageInstanceUpdate(v) => arm(f, "StageInstanceUpdate", v),
+            Self::StageInstanceDelete(v) => arm(f, "StageInstanceDelete", v),
+            Self::AutoModerationRuleCreate(v) => arm(f, "AutoModerationRuleCreate", v),
+            Self::AutoModerationRuleUpdate(v) => arm(f, "AutoModerationRuleUpdate", v),
+            Self::AutoModerationRuleDelete(v) => arm(f, "AutoModerationRuleDelete", v),
+            Self::AutoModerationActionExecution(v) => arm(f, "AutoModerationActionExecution", v),
+            Self::GuildAuditLogEntryCreate(v) => arm(f, "GuildAuditLogEntryCreate", v),
             Self::Unknown { t, raw } => {
                 f.debug_struct("Unknown").field("t", t).field("raw_len", &raw.get().len()).finish()
             }
@@ -599,6 +753,19 @@ pub struct MessageUpdateEvent {
     /// The objects the auto-populated selects of this message name, when sent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolved: Option<Box<ResolvedData>>,
+    /// The poll, when sent. Discord sends it with the final results once the poll ends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub poll: Option<Box<crate::Poll>>,
+}
+
+/// `GUILD_EMOJIS_UPDATE`: a guild's emojis changed. It holds the whole new list.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GuildEmojisUpdateEvent {
+    /// The guild.
+    pub guild_id: GuildId,
+    /// Every emoji the guild has now.
+    #[serde(default, deserialize_with = "dr_core::null_default")]
+    pub emojis: Vec<Emoji>,
 }
 
 /// Body of `MESSAGE_DELETE_BULK`.

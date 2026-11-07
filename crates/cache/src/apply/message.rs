@@ -21,7 +21,7 @@ fn merge(mut m: Message, e: MessageUpdateEvent) -> Message {
             attachments, reactions, components, pinned, mention_channels, message_snapshots;
         option: guild_id, member, timestamp, channel_type, flags, nonce, webhook_id, application_id,
             message_reference, activity, interaction_metadata, interaction, position, call,
-            shared_client_theme
+            shared_client_theme, poll
     );
     match e.edited_timestamp {
         Patch::Absent => {}

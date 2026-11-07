@@ -200,13 +200,39 @@ impl Connection {
             }
             2 => self.identify(&d).await,
             6 => self.resume(&d).await,
+            4 => self.voice_state(&d).await,
             8 => self.request_members(&d).await,
-            3 | 4 | 31 => true,
+            3 | 31 => true,
             _ => {
                 self.close(4001).await;
                 false
             }
         }
+    }
+
+    /// Op 4: moves the bot's voice state, and on a join hands out the mock voice server, as Discord
+    /// does with `VOICE_STATE_UPDATE` then `VOICE_SERVER_UPDATE`.
+    async fn voice_state(&mut self, d: &Value) -> bool {
+        let world = self.state.world.clone();
+        let Some(guild) = d.get("guild_id").and_then(Value::as_str).and_then(|s| s.parse::<u64>().ok()) else {
+            self.close(4001).await;
+            return false;
+        };
+        let channel = d.get("channel_id").and_then(Value::as_str).and_then(|s| s.parse::<u64>().ok());
+        let bot = world.bot_id().get();
+        let state = world.set_voice_state(guild, bot, channel, d.get("self_mute") == Some(&Value::Bool(true)));
+        if !self.dispatch("VOICE_STATE_UPDATE".to_owned(), state).await {
+            return false;
+        }
+        if channel.is_none() {
+            return true;
+        }
+        let server = json!({
+            "token": crate::voice::VOICE_TOKEN,
+            "guild_id": guild.to_string(),
+            "endpoint": self.state.voice_url,
+        });
+        self.dispatch("VOICE_SERVER_UPDATE".to_owned(), server).await
     }
 
     /// Op 8: answers with `GUILD_MEMBERS_CHUNK` events, as Discord does: every member, those whose

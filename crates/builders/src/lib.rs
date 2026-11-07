@@ -8,18 +8,24 @@
 //! UTF-16 units. Rules are in `[types 4.3]`.
 
 pub mod attachment;
+pub mod automod;
 pub mod channel;
 pub mod command;
 pub mod component;
 pub mod embed;
+pub mod expression;
 pub mod member;
 pub mod message;
 pub mod modal;
+pub mod poll;
 pub mod role;
+pub mod scheduled_event;
+pub mod stage;
 pub mod thread;
 pub mod webhook;
 
 pub use attachment::{CreateAttachment, MAX_ATTACHMENTS};
+pub use automod::{CreateAutoModRule, EditAutoModRule, MAX_AUTOMOD_TIMEOUT};
 pub use channel::{ChannelPosition, CreateChannel, EditChannel, MAX_SLOW_MODE, MIN_BITRATE};
 pub use command::{
     BooleanOption, ChannelOption, CommandData, CommandList, CommandOption, IntegerOption, Leaf, MessageContextCommand,
@@ -27,10 +33,14 @@ pub use command::{
 };
 pub use component::{ActionRowBuilder, ButtonBuilder, StringSelectBuilder, StringSelectOption, TextInputBuilder};
 pub use embed::EmbedBuilder;
+pub use expression::{CreateEmoji, CreateSticker, EditEmoji, EditSticker, MAX_EMOJI_BYTES, MAX_STICKER_BYTES};
 pub use member::{CreateBan, EditMember, MAX_BAN_DELETE_SECONDS, MAX_TIMEOUT};
 pub use message::{AllowedMentions, BulkDeleteMessages, CreateMessage, EditMessage, reply_reference};
 pub use modal::ModalBuilder;
+pub use poll::{MAX_POLL_ANSWERS, MAX_POLL_HOURS, PollBuilder};
 pub use role::{CreateRole, EditRole};
+pub use scheduled_event::{CreateScheduledEvent, EditScheduledEvent};
+pub use stage::{CreateStageInstance, EditStageInstance};
 pub use thread::{CreateForumPost, CreateThread};
 pub use webhook::{CreateWebhook, EditWebhook, ExecuteWebhook, ImageData};
 

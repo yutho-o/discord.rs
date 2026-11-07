@@ -31,15 +31,15 @@ of the protocol, and nothing more.
 | Moderation | Kick, ban, unban, list bans, timeout, edit members, permission check on a command's user |
 | Roles | List, create, edit, delete, give, take |
 | Members | Fetch every member of a large guild, search or name members, over the gateway in chunks |
-| Cache | Guilds, channels, roles, members, users, messages |
-| Events | `ClientReady`, messages (create, update, delete, bulk delete), reactions (add, remove), guilds, channels, threads, members, member chunks, bans, roles, webhooks, interactions. Others reach `on_raw`. |
+| Voice | With the `voice` feature: join and leave, play Ogg Opus or raw Opus frames, pause, receive audio by user, resume after a dropped socket, DAVE end-to-end encryption |
+| Cache | Guilds, channels, roles, members, users, messages, voice states |
+| Events | `ClientReady`, messages (create, update, delete, bulk delete), reactions (add, remove), guilds, channels, threads, members, member chunks, bans, roles, webhooks, voice states, interactions. Others reach `on_raw`. |
 
 ## Not ported yet, roughly in the order planned
 
-1. Voice.
-2. Polls, stickers, scheduled events, automod, audit log reads, invites, stage channels, monetization and
+1. Polls, stickers, scheduled events, automod, audit log reads, invites, stage channels, monetization and
    OAuth2.
-3. CDN helpers, formatters, cache sweepers, zstd, and code generation from discord-api-types.
+2. CDN helpers, formatters, cache sweepers, zstd, and code generation from discord-api-types.
 
 Types and routes for these are absent rather than stubbed.
 
@@ -52,6 +52,12 @@ Known limits of what exists:
   `has_permissions` uses.
 - A collector sees only the events of the intents the client was built with, and keeps at most 256
   matching events that were not read yet. Older ones are kept, newer ones dropped with a warning.
+- Voice plays Opus only. The library encodes nothing, so convert audio first, for example with
+  `ffmpeg -c:a libopus -ar 48000 -ac 2`.
+- After a voice close that cannot resume, the connection waits as `Disconnected` and does not rejoin
+  by itself.
+- With DAVE, a bot alone in a channel has no group key yet, so what it plays before someone joins is
+  dropped.
 - A file is read into memory before it is sent, and the size limit is left to Discord, which answers
   413 past it.
 
@@ -114,6 +120,23 @@ out. `DISCORD_GUILD_ID` is required.
 | Any of these from an account with no such permission | A refusal, and nothing happens |
 | React to a message | The terminal logs it |
 
+### `voice_bot`
+
+Needs the `voice` feature, `DISCORD_GUILD_ID`, and `VOICE_FILE` naming an Ogg Opus file. Give the bot the
+Connect and Speak permissions.
+
+```sh
+cargo run -p discord-rust --features voice --example voice_bot
+```
+
+| Try | Expected |
+| --- | --- |
+| `/join` from a voice channel | The bot joins it, and says whether DAVE is on |
+| `/play` | You hear the file |
+| `/stop`, then `/play` | It stops, then starts again from the beginning |
+| Drag the bot to another channel | It keeps playing there, or the log says why not |
+| `/leave` | The bot leaves |
+
 ### Reading the logs
 
 - `dispatch failed to decode`: a real payload does not match our types. This is the most likely kind of
@@ -141,6 +164,9 @@ needs no token and no network. Against the mock, the tests cover:
 - Every event fires with an empty cache.
 - REST: rate limit buckets, the retry matrix, cancelling a request at each await, error flattening.
 - zlib frames split across WebSocket messages.
+- Voice on a mock voice server: identify, both encryption modes, IP discovery, playback pacing, pause,
+  receive, resume after a dropped socket, close codes, and joining through the client. DAVE against a
+  test server that plays Discord's MLS external sender, with a second member decrypting both ways.
 
 ## Not verified
 
@@ -153,6 +179,8 @@ needs no token and no network. Against the mock, the tests cover:
 - Long runs. No test lasts more than seconds, so real heartbeat timing and session expiry are untested.
 - Large guilds and several shards against real Discord. The mock splits guilds and chunks members as documented,
   but serves a handful of them.
+- Voice against real Discord, DAVE included. `davey` 0.2.0, which does the MLS work, was released days
+  before this port used it.
 - Load. Nothing measures throughput or memory.
 
 ## Deliberate differences

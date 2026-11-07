@@ -1,6 +1,8 @@
 //! `GuildHandle` and `Bound<Guild>`.
 
-use crate::managers::{BansManager, MembersManager, RolesManager};
+use crate::managers::{
+    AutoModManager, BansManager, EmojisManager, MembersManager, RolesManager, ScheduledEventsManager, StickersManager,
+};
 use crate::{Bound, Call, Client};
 use dr_builders::{ChannelPosition, CreateChannel};
 use dr_core::RequestBody;
@@ -49,6 +51,31 @@ impl GuildHandle {
     /// The roles of this guild.
     pub fn roles(&self) -> RolesManager {
         RolesManager::new(self.client.clone(), self.id)
+    }
+
+    /// One page of this guild's audit log. Needs `VIEW_AUDIT_LOG`.
+    pub fn audit_log(&self, query: dr_rest::api::AuditLogQuery) -> Call<Bound<dr_model::AuditLog>> {
+        Call::new(self.client.clone(), self.client.rest().guilds().get_audit_log(self.id, query))
+    }
+
+    /// The auto moderation rules of this guild.
+    pub fn automod(&self) -> AutoModManager {
+        AutoModManager::new(self.client.clone(), self.id)
+    }
+
+    /// The custom emojis of this guild.
+    pub fn emojis(&self) -> EmojisManager {
+        EmojisManager::new(self.client.clone(), self.id)
+    }
+
+    /// The scheduled events of this guild.
+    pub fn scheduled_events(&self) -> ScheduledEventsManager {
+        ScheduledEventsManager::new(self.client.clone(), self.id)
+    }
+
+    /// The stickers of this guild.
+    pub fn stickers(&self) -> StickersManager {
+        StickersManager::new(self.client.clone(), self.id)
     }
 
     /// Fetches the channels of this guild from Discord.

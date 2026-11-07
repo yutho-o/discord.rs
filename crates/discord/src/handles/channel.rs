@@ -21,6 +21,27 @@ impl Client {
 }
 
 impl ChannelHandle {
+    /// Makes this stage channel live. Use `.reason(...)` for the audit log.
+    pub fn start_stage(&self, body: dr_builders::CreateStageInstance) -> Call<Bound<dr_model::StageInstance>> {
+        Call::new(self.client.clone(), self.client.rest().stage_instances().create(body))
+    }
+
+    /// The live stage of this channel, from Discord. Fails with an unknown stage instance error when
+    /// it is not live.
+    pub fn fetch_stage(&self) -> Call<Bound<dr_model::StageInstance>> {
+        Call::new(self.client.clone(), self.client.rest().stage_instances().get(self.id))
+    }
+
+    /// Edits the live stage of this channel.
+    pub fn edit_stage(&self, body: dr_builders::EditStageInstance) -> Call<Bound<dr_model::StageInstance>> {
+        Call::new(self.client.clone(), self.client.rest().stage_instances().modify(self.id, body))
+    }
+
+    /// Ends the live stage of this channel.
+    pub fn end_stage(&self) -> Call<()> {
+        Call::new(self.client.clone(), self.client.rest().stage_instances().delete(self.id))
+    }
+
     /// The id.
     pub fn id(&self) -> ChannelId {
         self.id

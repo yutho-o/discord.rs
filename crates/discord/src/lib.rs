@@ -38,6 +38,8 @@ pub mod managers;
 #[doc(hidden)]
 pub mod pipeline;
 pub mod prelude;
+#[cfg(feature = "voice")]
+pub mod voice;
 
 #[cfg(doctest)]
 mod misuse;

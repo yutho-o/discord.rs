@@ -397,6 +397,25 @@ fn every_typed_arm_decodes_and_reports_its_kind() {
         (DispatchKind::ThreadMemberUpdate, r#"{"guild_id":"200","id":"8","user_id":"1","join_timestamp":"2020-01-01T00:00:00+00:00","flags":1}"#.to_owned()),
         (DispatchKind::ThreadMembersUpdate, r#"{"id":"8","guild_id":"200","member_count":2,"removed_member_ids":["1"]}"#.to_owned()),
         (DispatchKind::WebhooksUpdate, r#"{"guild_id":"200","channel_id":"500"}"#.to_owned()),
+        (DispatchKind::VoiceStateUpdate, r#"{"guild_id":"200","channel_id":"500","user_id":"1","session_id":"s","deaf":false,"mute":false,"self_deaf":false,"self_mute":true,"self_video":false,"suppress":false}"#.to_owned()),
+        (DispatchKind::VoiceServerUpdate, r#"{"token":"t","guild_id":"200","endpoint":"x.discord.media:443"}"#.to_owned()),
+        (DispatchKind::MessagePollVoteAdd, r#"{"user_id":"1","channel_id":"500","message_id":"9","guild_id":"200","answer_id":1}"#.to_owned()),
+        (DispatchKind::MessagePollVoteRemove, r#"{"user_id":"1","channel_id":"500","message_id":"9","answer_id":2}"#.to_owned()),
+        (DispatchKind::GuildEmojisUpdate, r#"{"guild_id":"200","emojis":[{"id":"5","name":"blob"}]}"#.to_owned()),
+        (DispatchKind::GuildStickersUpdate, r#"{"guild_id":"200","stickers":[{"id":"6","name":"s","tags":"t","type":2,"format_type":1,"description":null}]}"#.to_owned()),
+        (DispatchKind::GuildScheduledEventCreate, r#"{"id":"7","guild_id":"200","channel_id":"500","name":"n","scheduled_start_time":"2030-01-01T00:00:00+00:00","scheduled_end_time":null,"privacy_level":2,"status":1,"entity_type":2,"entity_id":null,"entity_metadata":null,"recurrence_rule":null}"#.to_owned()),
+        (DispatchKind::GuildScheduledEventUpdate, r#"{"id":"7","guild_id":"200","channel_id":"500","name":"n","scheduled_start_time":"2030-01-01T00:00:00+00:00","scheduled_end_time":null,"privacy_level":2,"status":1,"entity_type":2,"entity_id":null,"entity_metadata":null,"recurrence_rule":null}"#.to_owned()),
+        (DispatchKind::GuildScheduledEventDelete, r#"{"id":"7","guild_id":"200","channel_id":"500","name":"n","scheduled_start_time":"2030-01-01T00:00:00+00:00","scheduled_end_time":null,"privacy_level":2,"status":1,"entity_type":2,"entity_id":null,"entity_metadata":null,"recurrence_rule":null}"#.to_owned()),
+        (DispatchKind::GuildScheduledEventUserAdd, r#"{"guild_scheduled_event_id":"7","user_id":"1","guild_id":"200"}"#.to_owned()),
+        (DispatchKind::GuildScheduledEventUserRemove, r#"{"guild_scheduled_event_id":"7","user_id":"1","guild_id":"200"}"#.to_owned()),
+        (DispatchKind::StageInstanceCreate, r#"{"id":"8","guild_id":"200","channel_id":"500","topic":"t","privacy_level":2,"discoverable_disabled":true}"#.to_owned()),
+        (DispatchKind::StageInstanceUpdate, r#"{"id":"8","guild_id":"200","channel_id":"500","topic":"t","privacy_level":2,"discoverable_disabled":true}"#.to_owned()),
+        (DispatchKind::StageInstanceDelete, r#"{"id":"8","guild_id":"200","channel_id":"500","topic":"t","privacy_level":2,"discoverable_disabled":true}"#.to_owned()),
+        (DispatchKind::AutoModerationRuleCreate, r#"{"id":"9","guild_id":"200","name":"n","creator_id":"1","event_type":1,"trigger_type":1,"trigger_metadata":{"keyword_filter":["x"]},"actions":[{"type":1}],"enabled":true,"exempt_roles":[],"exempt_channels":[]}"#.to_owned()),
+        (DispatchKind::AutoModerationRuleUpdate, r#"{"id":"9","guild_id":"200","name":"n","creator_id":"1","event_type":1,"trigger_type":1,"trigger_metadata":{"keyword_filter":["x"]},"actions":[{"type":1}],"enabled":true,"exempt_roles":[],"exempt_channels":[]}"#.to_owned()),
+        (DispatchKind::AutoModerationRuleDelete, r#"{"id":"9","guild_id":"200","name":"n","creator_id":"1","event_type":1,"trigger_type":1,"trigger_metadata":{"keyword_filter":["x"]},"actions":[{"type":1}],"enabled":true,"exempt_roles":[],"exempt_channels":[]}"#.to_owned()),
+        (DispatchKind::AutoModerationActionExecution, r#"{"guild_id":"200","action":{"type":2,"metadata":{"channel_id":"500"}},"rule_id":"9","rule_trigger_type":1,"user_id":"1","content":"","matched_keyword":null,"matched_content":null}"#.to_owned()),
+        (DispatchKind::GuildAuditLogEntryCreate, r#"{"guild_id":"200","id":"11","target_id":"1","user_id":"2","action_type":22,"changes":[],"reason":"spam"}"#.to_owned()),
         (DispatchKind::GuildMembersChunk, r#"{"guild_id":"200","members":[],"chunk_index":0,"chunk_count":1,"not_found":["9"],"nonce":"n"}"#.to_owned()),
     ];
     assert_eq!(table.len(), DispatchKind::COUNT - 3, "all but typing, presence and unknown");
@@ -806,12 +825,12 @@ fn unknown_event_with_broken_json_is_a_failure() {
 
 #[test]
 fn unknown_event_debug_hides_its_body() {
-    // VOICE_SERVER_UPDATE has no typed arm in the proof of concept, and it holds a token.
+    // An event with no typed arm may hold a secret, as VOICE_SERVER_UPDATE did before it had one.
     let body = r#"{"token":"voice-secret","guild_id":"1","endpoint":"x"}"#;
-    let event = dispatch("VOICE_SERVER_UPDATE", body);
+    let event = dispatch("VOICE_CHANNEL_EFFECT_SEND", body);
     let text = format!("{event:?}");
     assert!(!text.contains("voice-secret"), "{text}");
-    assert!(text.contains("VOICE_SERVER_UPDATE"), "{text}");
+    assert!(text.contains("VOICE_CHANNEL_EFFECT_SEND"), "{text}");
     assert!(text.contains(&body.len().to_string()), "{text}");
 }
 
@@ -996,4 +1015,16 @@ fn send_payloads_round_trip() {
 
     let read: GatewayFrame<Heartbeat> = serde_json::from_str(r#"{"op":1,"d":null}"#).unwrap();
     assert_eq!(read.d, None);
+}
+
+#[test]
+fn voice_events_hide_their_secrets() {
+    let body = r#"{"token":"voice-secret","guild_id":"1","endpoint":"x"}"#;
+    let Dispatch::VoiceServerUpdate(server) = dispatch("VOICE_SERVER_UPDATE", body) else { panic!() };
+    assert_eq!(server.token.expose(), "voice-secret");
+    assert!(!format!("{server:?}").contains("voice-secret"));
+    let body = r#"{"guild_id":"1","channel_id":null,"user_id":"2","session_id":"sess-secret"}"#;
+    let Dispatch::VoiceStateUpdate(state) = dispatch("VOICE_STATE_UPDATE", body) else { panic!() };
+    assert!(state.channel_id.is_none(), "a leave");
+    assert!(!format!("{state:?}").contains("sess-secret"));
 }

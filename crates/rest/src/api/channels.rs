@@ -5,7 +5,8 @@ use crate::{Empty, Method, Request, Rest};
 use dr_core::Timestamp;
 use dr_core::{IntoBody, RequestBody};
 use dr_model::{
-    Channel, ChannelId, GenericId, Message, MessageId, PermissionOverwrite, ThreadList, ThreadMember, UserId, routes,
+    Channel, ChannelId, GenericId, Message, MessageId, PermissionOverwrite, PollAnswerVoters, ThreadList, ThreadMember,
+    UserId, routes,
 };
 use serde::Serialize;
 
@@ -53,6 +54,36 @@ impl MessagePage {
     #[must_use]
     pub fn around(mut self, message: MessageId) -> Self {
         self.around = Some(message);
+        self
+    }
+}
+
+/// Which voters of a poll answer to list. With no anchor, the first ones.
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+pub struct VoterPage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    after: Option<UserId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    limit: Option<u8>,
+}
+
+impl VoterPage {
+    /// The first page: Discord's 25 first voters.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// How many voters, 1 to 100.
+    #[must_use]
+    pub fn limit(mut self, limit: u8) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+
+    /// Voters after this user.
+    #[must_use]
+    pub fn after(mut self, user: UserId) -> Self {
+        self.after = Some(user);
         self
     }
 }
@@ -267,6 +298,24 @@ impl ChannelsApi<'_> {
     ) -> Request<Empty> {
         let path = routes::channel_message_user_reaction(channel, message, &encode_path_segment(emoji), user);
         Request::new(self.0.clone(), Method::Delete, path, Ok(RequestBody::empty()))
+    }
+
+    /// `GET /channels/{channel}/polls/{message}/answers/{answer}`.
+    pub fn get_poll_answer_voters(
+        &self,
+        channel: ChannelId,
+        message: MessageId,
+        answer: u32,
+        page: VoterPage,
+    ) -> Request<PollAnswerVoters> {
+        let path = routes::channel_poll_answer(channel, message, answer);
+        Request::new(self.0.clone(), Method::Get, path, Ok(RequestBody::empty())).query(page)
+    }
+
+    /// `POST /channels/{channel}/polls/{message}/expire`. Ends a poll the bot sent, at once.
+    pub fn expire_poll(&self, channel: ChannelId, message: MessageId) -> Request<Message> {
+        let path = routes::channel_poll_expire(channel, message);
+        Request::new(self.0.clone(), Method::Post, path, Ok(RequestBody::empty()))
     }
 
     /// `DELETE /channels/{channel}/messages/{message}/reactions`.

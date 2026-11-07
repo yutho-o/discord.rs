@@ -11,7 +11,7 @@ use crate::pipeline::dispatch::spawn_handler;
 use crate::{Client, Deleted, Updated};
 use dr_cache::Change;
 use dr_core::DecodeError;
-use dr_model::{Dispatch, DispatchKind, Intents};
+use dr_model::{Dispatch, DispatchKind, GuildEmojisUpdateEvent, GuildStickersUpdateEvent, Intents};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -155,6 +155,69 @@ async fn apply_and_fire(client: &Client, shard: u32, dispatch: Dispatch) {
         Dispatch::MessageReactionAdd(event) => {
             fire::<MessageReactionAdd>(client, shard, client.bind(*event)).await;
         }
+        Dispatch::GuildEmojisUpdate(event) => {
+            let old = cache.apply_guild_emojis_update(shard, &event);
+            let old = old.map(|emojis| Arc::new(GuildEmojisUpdateEvent { guild_id: event.guild_id, emojis }));
+            fire::<GuildEmojisUpdate>(client, shard, updated(client, Change { old, new: Arc::new(*event) })).await;
+        }
+        Dispatch::GuildStickersUpdate(event) => {
+            let old = cache.apply_guild_stickers_update(shard, &event);
+            let old = old.map(|stickers| Arc::new(GuildStickersUpdateEvent { guild_id: event.guild_id, stickers }));
+            fire::<GuildStickersUpdate>(client, shard, updated(client, Change { old, new: Arc::new(*event) })).await;
+        }
+        Dispatch::GuildScheduledEventCreate(event) => {
+            let change = cache.apply_scheduled_event_upsert(shard, *event);
+            fire::<GuildScheduledEventCreate>(client, shard, client.bind_arc(change.new)).await;
+        }
+        Dispatch::GuildScheduledEventUpdate(event) => {
+            let change = cache.apply_scheduled_event_upsert(shard, *event);
+            fire::<GuildScheduledEventUpdate>(client, shard, updated(client, change)).await;
+        }
+        Dispatch::GuildScheduledEventDelete(event) => {
+            let cached = cache.apply_scheduled_event_delete(shard, &event);
+            fire::<GuildScheduledEventDelete>(client, shard, Deleted { event: client.bind(*event), cached }).await;
+        }
+        Dispatch::GuildScheduledEventUserAdd(event) => {
+            cache.apply_scheduled_event_user(shard, &event, true);
+            fire::<GuildScheduledEventUserAdd>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::GuildScheduledEventUserRemove(event) => {
+            cache.apply_scheduled_event_user(shard, &event, false);
+            fire::<GuildScheduledEventUserRemove>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::StageInstanceCreate(stage) => {
+            let change = cache.apply_stage_upsert(shard, *stage);
+            fire::<StageInstanceCreate>(client, shard, client.bind_arc(change.new)).await;
+        }
+        Dispatch::StageInstanceUpdate(stage) => {
+            let change = cache.apply_stage_upsert(shard, *stage);
+            fire::<StageInstanceUpdate>(client, shard, updated(client, change)).await;
+        }
+        Dispatch::StageInstanceDelete(stage) => {
+            let cached = cache.apply_stage_delete(shard, &stage);
+            fire::<StageInstanceDelete>(client, shard, Deleted { event: client.bind(*stage), cached }).await;
+        }
+        Dispatch::AutoModerationRuleCreate(rule) => {
+            fire::<AutoModerationRuleCreate>(client, shard, client.bind(*rule)).await;
+        }
+        Dispatch::AutoModerationRuleUpdate(rule) => {
+            fire::<AutoModerationRuleUpdate>(client, shard, client.bind(*rule)).await;
+        }
+        Dispatch::AutoModerationRuleDelete(rule) => {
+            fire::<AutoModerationRuleDelete>(client, shard, client.bind(*rule)).await;
+        }
+        Dispatch::AutoModerationActionExecution(event) => {
+            fire::<AutoModerationActionExecution>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::GuildAuditLogEntryCreate(event) => {
+            fire::<GuildAuditLogEntryCreate>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::MessagePollVoteAdd(event) => {
+            fire::<MessagePollVoteAdd>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::MessagePollVoteRemove(event) => {
+            fire::<MessagePollVoteRemove>(client, shard, client.bind(*event)).await;
+        }
         Dispatch::MessageReactionRemove(event) => {
             fire::<MessageReactionRemove>(client, shard, client.bind(*event)).await;
         }
@@ -200,6 +263,17 @@ async fn apply_and_fire(client: &Client, shard: u32, dispatch: Dispatch) {
         }
         Dispatch::WebhooksUpdate(event) => {
             fire::<WebhooksUpdate>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::VoiceStateUpdate(event) => {
+            let change = cache.apply_voice_state_update(shard, *event);
+            #[cfg(feature = "voice")]
+            crate::voice::on_voice_state(client, &change.new);
+            fire::<VoiceStateUpdate>(client, shard, updated(client, change)).await;
+        }
+        Dispatch::VoiceServerUpdate(event) => {
+            #[cfg(feature = "voice")]
+            crate::voice::on_voice_server(client, &event);
+            fire::<VoiceServerUpdate>(client, shard, client.bind(*event)).await;
         }
         Dispatch::GuildMembersChunk(event) => {
             let event = cache.apply_members_chunk(shard, *event);

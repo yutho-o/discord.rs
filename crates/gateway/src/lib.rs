@@ -5,7 +5,7 @@
 //! The socket task owns the WebSocket and the timers. It never decodes a payload body and never
 //! waits on anything downstream, so a slow handler cannot delay a heartbeat.
 //!
-//! The client runs one shard for now, `[0, 1]`.
+//! The manager runs every shard of the bot, or a range of them, under one identify budget.
 
 pub mod compress;
 pub mod connector;

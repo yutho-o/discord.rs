@@ -73,7 +73,7 @@ fn scalar(value: Value) -> Option<String> {
 /// goes as `multipart/form-data`: the JSON as the part `payload_json`, then file `i` of
 /// [`RequestBody::files`] as `files[i]`.
 pub fn encode_body(body: &RequestBody) -> Option<(String, Bytes)> {
-    if body.files.is_empty() {
+    if body.files.is_empty() && body.fields.is_empty() {
         return body.json.clone().map(|json| (String::from("application/json"), json));
     }
     let boundary = pick_boundary(body);
@@ -83,9 +83,15 @@ pub fn encode_body(body: &RequestBody) -> Option<(String, Bytes)> {
         out.put_slice(json);
         out.put_slice(CRLF);
     }
+    for (name, value) in &body.fields {
+        part_header(&mut out, &boundary, &escape_filename(name), None, "text/plain; charset=utf-8");
+        out.put_slice(value.as_bytes());
+        out.put_slice(CRLF);
+    }
     for (i, file) in body.files.iter().enumerate() {
         let media = file.content_type.as_deref().filter(|t| is_media_type(t)).unwrap_or("application/octet-stream");
-        part_header(&mut out, &boundary, &format!("files[{i}]"), Some(&file.name), media);
+        let field = file.field.as_deref().map_or_else(|| format!("files[{i}]"), escape_filename);
+        part_header(&mut out, &boundary, &field, Some(&file.name), media);
         out.put_slice(&file.data);
         out.put_slice(CRLF);
     }
@@ -98,7 +104,9 @@ const CRLF: &[u8] = b"\r\n";
 
 /// A boundary that appears in no part, so no content can end a part early.
 fn pick_boundary(body: &RequestBody) -> String {
-    let parts: Vec<&[u8]> = body.json.iter().map(|j| &j[..]).chain(body.files.iter().map(|f| &f.data[..])).collect();
+    let fields = body.fields.iter().map(|(_, v)| v.as_bytes());
+    let parts: Vec<&[u8]> =
+        body.json.iter().map(|j| &j[..]).chain(fields).chain(body.files.iter().map(|f| &f.data[..])).collect();
     let mut seed = parts
         .iter()
         .fold(0x9e37_79b9_7f4a_7c15_u64, |h, p| h.rotate_left(5) ^ u64::try_from(p.len()).unwrap_or(u64::MAX));

@@ -67,14 +67,119 @@ fn guild_ban(state: &RestState, request: &RecordedRequest, guild: u64, user: u64
     }
 }
 
+/// `GET` lists, `POST` creates, through `make`, which builds the new item.
+fn expressions(
+    state: &RestState,
+    request: &RecordedRequest,
+    guild: u64,
+    key: &str,
+    make: impl FnOnce(&RecordedRequest, u64) -> Option<Value>,
+) -> Response {
+    let world = &state.world;
+    match request.method.as_str() {
+        "GET" => world.expressions(guild, key).map_or_else(|| unknown("guild", 10004), |l| ok(Value::Array(l))),
+        "POST" => {
+            let id = world.next_id();
+            let Some(item) = make(request, id) else {
+                return error(StatusCode::BAD_REQUEST, 50035, "Invalid Form Body");
+            };
+            world
+                .edit_expressions(guild, key, |list| {
+                    list.push(item.clone());
+                    Some(item)
+                })
+                .map_or_else(|| unknown("guild", 10004), ok)
+        }
+        _ => not_found(),
+    }
+}
+
+/// `GET`, `PATCH` and `DELETE` of one emoji or sticker.
+fn expression(state: &RestState, request: &RecordedRequest, guild: u64, key: &str, id: &str, code: u32) -> Response {
+    let world = &state.world;
+    let what = if key == "emojis" { "emoji" } else { "sticker" };
+    let matches = |item: &Value| item["id"] == json!(id);
+    match request.method.as_str() {
+        "GET" => world
+            .expressions(guild, key)
+            .and_then(|list| list.into_iter().find(|i| matches(i)))
+            .map_or_else(|| unknown(what, code), ok),
+        "PATCH" => {
+            let body = request.json();
+            let edited = world.edit_expressions(guild, key, |list| {
+                let item = list.iter_mut().find(|i| matches(i))?;
+                merge_into(item, &body);
+                Some(item.clone())
+            });
+            edited.map_or_else(|| unknown(what, code), ok)
+        }
+        "DELETE" => {
+            let removed = world.edit_expressions(guild, key, |list| {
+                let at = list.iter().position(matches)?;
+                Some(list.remove(at))
+            });
+            done_or(removed.is_some(), what, code)
+        }
+        _ => not_found(),
+    }
+}
+
+fn merge_into(target: &mut Value, body: &Value) {
+    if let (Some(target), Some(body)) = (target.as_object_mut(), body.as_object()) {
+        for (key, value) in body {
+            target.insert(key.clone(), value.clone());
+        }
+    }
+}
+
+fn new_emoji(state: &RestState, request: &RecordedRequest, id: u64) -> Option<Value> {
+    let body = request.json();
+    body["image"].as_str().filter(|i| i.starts_with("data:image/"))?;
+    Some(json!({
+        "id": id.to_string(),
+        "name": body["name"],
+        "roles": body.get("roles").cloned().unwrap_or(json!([])),
+        "user": state.world.bot_user(),
+        "require_colons": true,
+        "managed": false,
+        "animated": body["image"].as_str().is_some_and(|i| i.starts_with("data:image/gif")),
+        "available": true,
+    }))
+}
+
+fn new_sticker(state: &RestState, request: &RecordedRequest, guild: u64, id: u64) -> Option<Value> {
+    let parts = request.parts()?;
+    let text =
+        |name: &str| parts.iter().find(|p| p.name == name).map(|p| String::from_utf8_lossy(&p.data).into_owned());
+    let file = parts.iter().find(|p| p.name == "file")?;
+    let format = match file.content_type.as_deref() {
+        Some("image/gif") => 4,
+        Some("application/json") => 3,
+        _ => 1,
+    };
+    let description = text("description").filter(|d| !d.is_empty());
+    Some(json!({
+        "id": id.to_string(),
+        "name": text("name")?,
+        "description": description,
+        "tags": text("tags")?,
+        "type": 2,
+        "format_type": format,
+        "available": true,
+        "guild_id": guild.to_string(),
+        "user": state.world.bot_user(),
+    }))
+}
+
 /// Answers one request. What takes a bot token needs an `Authorization` header.
 pub(crate) async fn route(state: &RestState, request: &RecordedRequest) -> Response {
     let path = request.path.replace("%40", "@");
     let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
     // A webhook by id alone takes the bot's token. With its own token in the path, it takes none.
-    let needs_auth =
-        matches!(segments.first(), Some(&"users" | &"channels" | &"guilds" | &"applications" | &"gateway"))
-            || matches!(segments.as_slice(), ["webhooks", _]);
+    let needs_auth = matches!(
+        segments.first(),
+        Some(&"users" | &"channels" | &"guilds" | &"applications" | &"gateway" | &"stickers" | &"stage-instances")
+    ) || matches!(segments.as_slice(), ["webhooks", _]);
     if needs_auth && !request.header("authorization").is_some_and(|a| a.starts_with("Bot ")) {
         return error(StatusCode::UNAUTHORIZED, 0, "401: Unauthorized");
     }
@@ -183,6 +288,112 @@ pub(crate) async fn route(state: &RestState, request: &RecordedRequest) -> Respo
                 }
                 _ => not_found(),
             },
+            _ => not_found(),
+        },
+        ["stage-instances"] if is(Method::POST) => match world.start_stage(&request.json()) {
+            Ok(stage) => ok(stage),
+            Err(10003) => unknown("channel", 10003),
+            Err(code) => error(StatusCode::BAD_REQUEST, code, "Cannot start a stage here"),
+        },
+        ["stage-instances", channel] => match (id(channel), method.as_str()) {
+            (Some(c), "GET") => world.stage(c).map_or_else(|| unknown("stage instance", 10067), ok),
+            (Some(c), "PATCH") => {
+                world.edit_stage(c, &request.json()).map_or_else(|| unknown("stage instance", 10067), ok)
+            }
+            (Some(c), "DELETE") => done_or(world.end_stage(c), "stage instance", 10067),
+            _ => not_found(),
+        },
+        ["guilds", guild, "audit-logs"] if is(Method::GET) => id(guild).map_or_else(not_found, |g| {
+            let limit = query_value(request, "limit").unwrap_or(50);
+            let user = query_value(request, "user_id");
+            let action = query_value(request, "action_type");
+            ok(world.audit_log(g, user, action, query_value(request, "before"), limit))
+        }),
+        ["guilds", guild, "auto-moderation", "rules"] => match (id(guild), method.as_str()) {
+            (Some(g), "GET") => ok(Value::Array(world.automod_rules(g))),
+            (Some(g), "POST") => match world.create_automod_rule(g, &request.json()) {
+                Some(Ok(rule)) => ok(rule),
+                Some(Err(message)) => error(StatusCode::BAD_REQUEST, 30035, message),
+                None => unknown("guild", 10004),
+            },
+            _ => not_found(),
+        },
+        ["guilds", guild, "auto-moderation", "rules", rule] => match (id(guild), id(rule), method.as_str()) {
+            (Some(g), Some(r), "GET") => {
+                world.automod_rule(g, r).map_or_else(|| unknown("auto moderation rule", 10066), ok)
+            }
+            (Some(g), Some(r), "PATCH") => world
+                .edit_automod_rule(g, r, &request.json())
+                .map_or_else(|| unknown("auto moderation rule", 10066), ok),
+            (Some(g), Some(r), "DELETE") => done_or(world.delete_automod_rule(g, r), "auto moderation rule", 10066),
+            _ => not_found(),
+        },
+        ["guilds", guild, "scheduled-events"] => match (id(guild), method.as_str()) {
+            (Some(g), "GET") => {
+                ok(Value::Array(world.scheduled_events(g, query_value(request, "with_user_count") == Some(true))))
+            }
+            (Some(g), "POST") => {
+                world.create_scheduled_event(g, &request.json()).map_or_else(|| unknown("guild", 10004), ok)
+            }
+            _ => not_found(),
+        },
+        ["guilds", guild, "scheduled-events", event] => match (id(guild), id(event), method.as_str()) {
+            (Some(g), Some(e), "GET") => {
+                let with_count = query_value(request, "with_user_count") == Some(true);
+                world.scheduled_event(g, e, with_count).map_or_else(|| unknown("guild scheduled event", 10070), ok)
+            }
+            (Some(g), Some(e), "PATCH") => match world.edit_scheduled_event(g, e, &request.json()) {
+                Some(Ok(event)) => ok(event),
+                Some(Err(message)) => error(StatusCode::BAD_REQUEST, 180002, message),
+                None => unknown("guild scheduled event", 10070),
+            },
+            (Some(g), Some(e), "DELETE") => done_or(world.delete_scheduled_event(g, e), "guild scheduled event", 10070),
+            _ => not_found(),
+        },
+        ["guilds", guild, "scheduled-events", event, "users"] if is(Method::GET) => match (id(guild), id(event)) {
+            (Some(g), Some(e)) => {
+                let after = query_value(request, "after").unwrap_or(0);
+                let limit = query_value(request, "limit").unwrap_or(100);
+                let with_member = query_value(request, "with_member") == Some(true);
+                ok(Value::Array(world.event_users(g, e, after, limit, with_member)))
+            }
+            _ => not_found(),
+        },
+        ["guilds", guild, "emojis"] => match id(guild) {
+            Some(g) => expressions(state, request, g, "emojis", |r, i| new_emoji(state, r, i)),
+            None => not_found(),
+        },
+        ["guilds", guild, "emojis", emoji] => match id(guild) {
+            Some(g) => expression(state, request, g, "emojis", emoji, 10014),
+            None => not_found(),
+        },
+        ["guilds", guild, "stickers"] => match id(guild) {
+            Some(g) => expressions(state, request, g, "stickers", |r, i| new_sticker(state, r, g, i)),
+            None => not_found(),
+        },
+        ["guilds", guild, "stickers", sticker] => match id(guild) {
+            Some(g) => expression(state, request, g, "stickers", sticker, 10060),
+            None => not_found(),
+        },
+        ["stickers", sticker] if is(Method::GET) => {
+            let found = world
+                .guild_ids()
+                .into_iter()
+                .find_map(|g| world.expressions(g.get(), "stickers")?.into_iter().find(|s| s["id"] == json!(sticker)));
+            found.map_or_else(|| unknown("sticker", 10060), ok)
+        }
+        ["sticker-packs"] if is(Method::GET) => ok(json!({"sticker_packs": []})),
+        ["channels", channel, "polls", message, "answers", answer] if is(Method::GET) => {
+            let after = query_value(request, "after").unwrap_or(0);
+            let limit = query_value(request, "limit").unwrap_or(25);
+            let found = match (id(channel), id(message), answer.parse()) {
+                (Some(c), Some(m), Ok(a)) => world.poll_voters(c, m, a, after, limit),
+                _ => None,
+            };
+            found.map_or_else(|| unknown("message", 10008), ok)
+        }
+        ["channels", channel, "polls", message, "expire"] if is(Method::POST) => match (id(channel), id(message)) {
+            (Some(c), Some(m)) => world.expire_poll(c, m).map_or_else(|| unknown("message", 10008), ok),
             _ => not_found(),
         },
         ["channels", _, "messages", _, "reactions", _, "@me"] => no_content(),

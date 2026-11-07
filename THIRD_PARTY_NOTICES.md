@@ -9,7 +9,7 @@ This is engineering guidance from reading the licence texts, not legal advice.
 |---|---|---|---|
 | `discord.js` (root and `packages/discord.js`) | Apache-2.0 | 2021 Noel Buechler, 2015 Amish Shah | Behaviour, structure, tests |
 | `packages/ws` | Apache-2.0 | 2022 Noel Buechler, 2022 Denis Cristea | `dr_gateway` |
-| `packages/voice` | Apache-2.0 | 2022 Noel Buechler, 2020 Amish Shah | `dr_voice` (not ported yet) |
+| `packages/voice` | Apache-2.0 | 2022 Noel Buechler, 2020 Amish Shah | `dr_voice` |
 | `packages/builders` | Apache-2.0 | 2021 Noel Buechler, 2021 Vlad Frangu | `dr_builders` |
 | `packages/collection` | Apache-2.0 | 2021 Noel Buechler, 2015 Amish Shah | `Collection` (not ported yet) |
 | `packages/formatters` | Apache-2.0 | 2021 Noel Buechler, 2021 Vlad Frangu | `fmt`, `escape` (not ported yet) |
@@ -17,6 +17,7 @@ This is engineering guidance from reading the licence texts, not legal advice.
 | `packages/core` | Apache-2.0 | 2022 Noel Buechler, 2022 Suneet Tipirneni | REST groups |
 | `packages/rest` | Apache-2.0 | No copyright line in its `LICENSE` (re-checked at L0). Covered by the root lines | `dr_rest` |
 | `discord-api-types` | MIT | (c) 2020 vladfrangu | `dr_model`, doc comments |
+| `davey` 0.2.0 | MIT | (c) Snazzah. The package names no year | The MLS external sender in `crates/voice/tests/dave.rs` |
 | `prism-media` 1.3.5 | Apache-2.0 | 2019 - 2020 Amish Shah | Demuxer behaviour (not ported yet) |
 
 No upstream package has a `NOTICE` file within depth 3 of its repository, so Apache-2.0 section 4(d)
@@ -27,6 +28,32 @@ has nothing to copy. Dependencies keep their own licences and are listed, not re
 MIT License
 
 Copyright (c) 2020 vladfrangu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## davey, MIT License
+
+The `davey` package declares the MIT licence and ships no licence file, so the standard text follows.
+
+MIT License
+
+Copyright (c) Snazzah
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

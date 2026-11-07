@@ -1,9 +1,9 @@
 //! `CreateMessage`, the body of a new message or an interaction reply.
 
 use crate::attachment::{AttachmentRef, validate_files};
-use crate::{ActionRowBuilder, AllowedMentions, CreateAttachment, EmbedBuilder, check_len, nested};
+use crate::{ActionRowBuilder, AllowedMentions, CreateAttachment, EmbedBuilder, PollBuilder, check_len, nested};
 use dr_core::{BodyError, FileUpload, IntoBody, RequestBody, ValidationError};
-use dr_model::{MessageFlags, MessageId, MessageReference, Nonce};
+use dr_model::{MessageFlags, MessageId, MessageReference, Nonce, StickerId};
 use serde::Serialize;
 
 /// The body of a new message. `&str`, `String` and `EmbedBuilder` convert into it, so that
@@ -31,6 +31,10 @@ pub struct CreateMessage {
     enforce_nonce: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     attachments: Vec<AttachmentRef>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    poll: Option<Box<PollBuilder>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    sticker_ids: Vec<StickerId>,
     #[serde(skip)]
     files: Vec<CreateAttachment>,
     #[serde(skip)]
@@ -55,6 +59,16 @@ impl CreateMessage {
     /// Adds an action row.
     pub fn row(mut self, r: ActionRowBuilder) -> Self {
         self.components.push(r);
+        self
+    }
+    /// Adds a poll. A message with a poll needs nothing else.
+    pub fn poll(mut self, poll: PollBuilder) -> Self {
+        self.poll = Some(Box::new(poll));
+        self
+    }
+    /// Sends a sticker, at most 3. A guild sticker works only in its own guild.
+    pub fn sticker(mut self, sticker: StickerId) -> Self {
+        self.sticker_ids.push(sticker);
         self
     }
     /// Uploads a file with the message, at most 10.
@@ -125,8 +139,17 @@ impl CreateMessage {
             return Ok(());
         }
         let content = self.content.as_deref().unwrap_or_default();
-        if content.is_empty() && self.embeds.is_empty() && self.components.is_empty() && self.files.is_empty() {
-            return Err(ValidationError::new("", "a message needs content, an embed, a component or a file"));
+        if content.is_empty()
+            && self.embeds.is_empty()
+            && self.components.is_empty()
+            && self.files.is_empty()
+            && self.poll.is_none()
+            && self.sticker_ids.is_empty()
+        {
+            return Err(ValidationError::new(
+                "",
+                "a message needs content, an embed, a component, a file, a poll or a sticker",
+            ));
         }
         validate_files(&self.files)?;
         check_len("content", content, 0, 2000)?;
@@ -142,6 +165,12 @@ impl CreateMessage {
         }
         for (i, r) in rows.iter().enumerate() {
             r.validate().map_err(|err| nested(format!("components[{i}]"), err))?;
+        }
+        if self.sticker_ids.len() > 3 {
+            return Err(ValidationError::new("sticker_ids", "must hold at most 3 stickers"));
+        }
+        if let Some(poll) = &self.poll {
+            poll.validate().map_err(|err| nested("poll".to_owned(), err))?;
         }
         if let Some(Nonce::Str(n)) = &self.nonce {
             check_len("nonce", n, 0, 25)?;

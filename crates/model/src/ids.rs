@@ -5,6 +5,10 @@ use dr_core::marker::{
     ApplicationMarker, AttachmentMarker, ChannelMarker, CommandMarker, EmojiMarker, GenericMarker, GuildMarker,
     IntegrationMarker, InteractionMarker, MessageMarker, RoleMarker, UserMarker, WebhookMarker,
 };
+use dr_core::marker::{
+    AuditLogEntryMarker, AutoModRuleMarker, EntitlementMarker, ScheduledEventMarker, SkuMarker, StageInstanceMarker,
+    StickerMarker, StickerPackMarker, SubscriptionMarker,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -32,6 +36,24 @@ pub type CommandId = Id<CommandMarker>;
 pub type InteractionId = Id<InteractionMarker>;
 /// Id of an integration.
 pub type IntegrationId = Id<IntegrationMarker>;
+/// Id of a sticker.
+pub type StickerId = Id<StickerMarker>;
+/// Id of a pack of standard stickers.
+pub type StickerPackId = Id<StickerPackMarker>;
+/// Id of a guild scheduled event.
+pub type ScheduledEventId = Id<ScheduledEventMarker>;
+/// Id of an auto moderation rule.
+pub type AutoModRuleId = Id<AutoModRuleMarker>;
+/// Id of an audit log entry.
+pub type AuditLogEntryId = Id<AuditLogEntryMarker>;
+/// Id of a stage instance.
+pub type StageInstanceId = Id<StageInstanceMarker>;
+/// Id of a SKU, something an application sells.
+pub type SkuId = Id<SkuMarker>;
+/// Id of an entitlement, a user's or guild's access to a SKU.
+pub type EntitlementId = Id<EntitlementMarker>;
+/// Id of a subscription.
+pub type SubscriptionId = Id<SubscriptionMarker>;
 /// A snowflake with no specific resource, such as a command version or an overwrite target.
 pub type GenericId = Id<GenericMarker>;
 

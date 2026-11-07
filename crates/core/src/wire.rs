@@ -188,12 +188,20 @@ pub struct FileUpload {
     pub content_type: Option<String>,
     /// The content.
     pub data: Bytes,
+    /// The form field it goes in, `files[index]` when `None`. A sticker upload names it `file`.
+    pub field: Option<String>,
 }
 
 impl FileUpload {
     /// A file named `name` holding `data`.
     pub fn new(name: impl Into<String>, data: impl Into<Bytes>) -> Self {
-        Self { name: name.into(), content_type: None, data: data.into() }
+        Self { name: name.into(), content_type: None, data: data.into(), field: None }
+    }
+
+    /// Sends it in the form field `name` instead of `files[index]`.
+    pub fn field(mut self, name: impl Into<String>) -> Self {
+        self.field = Some(name.into());
+        self
     }
 
     /// Sets the media type, such as `image/png`.
@@ -226,6 +234,9 @@ pub struct RequestBody {
     pub json: Option<Bytes>,
     /// Files, sent in this order.
     pub files: Vec<FileUpload>,
+    /// Plain text form fields, sent after the JSON and before the files. Only a form with no JSON
+    /// uses them, such as a sticker upload.
+    pub fields: Vec<(String, String)>,
 }
 
 impl RequestBody {
@@ -236,7 +247,13 @@ impl RequestBody {
 
     /// Encodes `v` as JSON.
     pub fn json<T: Serialize + ?Sized>(v: &T) -> Result<Self, BodyError> {
-        Ok(Self { json: Some(Bytes::from(serde_json::to_vec(v)?)), files: Vec::new() })
+        Ok(Self { json: Some(Bytes::from(serde_json::to_vec(v)?)), files: Vec::new(), fields: Vec::new() })
+    }
+
+    /// A `multipart/form-data` body of text fields, with no JSON. Add its files with
+    /// [`Self::with_files`].
+    pub fn form(fields: impl IntoIterator<Item = (String, String)>) -> Self {
+        Self { json: None, files: Vec::new(), fields: fields.into_iter().collect() }
     }
 
     /// Adds files after those already there.

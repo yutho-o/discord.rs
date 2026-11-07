@@ -181,15 +181,13 @@ fn null_lists_read_as_empty() {
 #[test]
 fn unknown_keys_and_cut_features_are_ignored() {
     let value = with(base(), "brand_new_field", json!({ "a": 1 }));
-    let value = with(value, "poll", json!({ "question": { "text": "?" } }));
-    let value = with(value, "sticker_items", json!([{ "id": "1", "name": "s", "format_type": 1 }]));
     let value = with(value, "thread", json!({ "id": "1", "type": 11 }));
     let value = with(value, "application", json!({ "id": "1", "name": "a" }));
     let value = with(value, "role_subscription_data", json!({ "tier_name": "t" }));
     let m: Message = parse(&value);
     assert_eq!(m.content, "hello");
     let written = round_trip(&m);
-    for key in ["brand_new_field", "poll", "sticker_items", "thread", "application"] {
+    for key in ["brand_new_field", "thread", "application"] {
         assert!(written.get(key).is_none(), "{key}");
     }
     assert!(written.get("resolved").is_none(), "absent stays absent");
@@ -905,4 +903,28 @@ fn bad_field_types_fail_with_the_field_in_the_path() {
         let error = decode::<Message>(&with(base(), key, value).to_string()).unwrap_err();
         assert!(error.path.contains(key), "{key}: path was {:?}", error.path);
     }
+}
+
+#[test]
+fn a_poll_is_read_with_its_results() {
+    let poll = json!({
+        "question": {"text": "Pizza?"},
+        "answers": [{"answer_id": 1, "poll_media": {"text": "Yes"}}, {"answer_id": 2, "poll_media": {"text": "No", "emoji": {"name": "🍕"}}}],
+        "expiry": "2020-01-02T00:00:00+00:00",
+        "allow_multiselect": false,
+        "layout_type": 1,
+        "results": {"is_finalized": false, "answer_counts": [{"id": 1, "count": 3, "me_voted": true}]},
+    });
+    let m: Message = parse(&with(base(), "poll", poll.clone()));
+    let p = m.poll.as_ref().unwrap();
+    assert_eq!(p.question.text.as_deref(), Some("Pizza?"));
+    assert_eq!(p.answer(2).unwrap().poll_media.emoji.as_ref().unwrap().name.as_deref(), Some("🍕"));
+    assert_eq!((p.votes(1), p.votes(2)), (Some(3), Some(0)), "an answer nobody chose may be missing");
+    assert!(p.results.as_ref().unwrap().answer_counts[0].me_voted);
+    assert_eq!(round_trip(&m)["poll"]["results"], poll["results"]);
+
+    let mut without = poll;
+    without.as_object_mut().unwrap().remove("results");
+    let m: Message = parse(&with(base(), "poll", without));
+    assert_eq!(m.poll.unwrap().votes(1), None, "absent results are unknown, not zero");
 }

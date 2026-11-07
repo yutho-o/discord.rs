@@ -690,8 +690,8 @@ fn guild_lists_sent_as_null_read_as_empty() {
 #[test]
 fn guild_ignores_keys_of_cut_features_and_new_keys() {
     let g: Guild = decode(
-        r#"{"id":"5","stickers":[{"id":"1"}],"presences":[{"user":{"id":"3"}}],
-            "voice_states":[{}],"stage_instances":[{}],"guild_scheduled_events":[{}],
+        r#"{"id":"5","presences":[{"user":{"id":"3"}}],
+            
             "soundboard_sounds":[{}],"home_header":null,"a_new_key":{"x":1}}"#,
     )
     .unwrap();
@@ -837,4 +837,16 @@ fn nonce_converts_and_displays() {
     assert_eq!(Nonce::from("a".to_owned()), Nonce::Str("a".to_owned()));
     assert_eq!(Nonce::Int(5).to_string(), "5");
     assert_eq!(Nonce::Str("a".to_owned()).to_string(), "a");
+}
+
+#[test]
+fn guild_reads_its_voice_states() {
+    let g: Guild = decode(
+        r#"{"id":"5","voice_states":[{"channel_id":"7","user_id":"3","session_id":"s","deaf":false,"mute":false,
+            "self_deaf":true,"self_mute":false,"self_video":false,"suppress":false,"request_to_speak_timestamp":null}]}"#,
+    )
+    .unwrap();
+    assert_eq!(g.voice_states.len(), 1);
+    assert_eq!(g.voice_states[0].user_id, dr_model::UserId::new(3));
+    assert!(g.voice_states[0].self_deaf);
 }

@@ -6,15 +6,17 @@ pub use crate::{
     Bound, BoxError, Client, ClientBuilder, Context, Deleted, Error, GatewayEvent, HandlerResult, ShutdownMode, Updated,
 };
 pub use dr_builders::{
-    ActionRowBuilder, BulkDeleteMessages, ButtonBuilder, ChannelPosition, CreateAttachment, CreateBan, CreateChannel,
-    CreateForumPost, CreateMessage, CreateRole, CreateThread, CreateWebhook, EditChannel, EditMember, EditMessage,
-    EditRole, EditWebhook, EmbedBuilder, ExecuteWebhook, ImageData, MessageContextCommand, ModalBuilder,
-    SlashCommandBuilder, StringSelectBuilder, Subcommand, TextInputBuilder, UserContextCommand, commands,
+    ActionRowBuilder, BulkDeleteMessages, ButtonBuilder, ChannelPosition, CreateAttachment, CreateAutoModRule,
+    CreateBan, CreateChannel, CreateForumPost, CreateMessage, CreateRole, CreateScheduledEvent, CreateStageInstance,
+    CreateThread, CreateWebhook, EditAutoModRule, EditChannel, EditMember, EditMessage, EditRole, EditScheduledEvent,
+    EditStageInstance, EditWebhook, EmbedBuilder, ExecuteWebhook, ImageData, MessageContextCommand, ModalBuilder,
+    PollBuilder, SlashCommandBuilder, StringSelectBuilder, Subcommand, TextInputBuilder, UserContextCommand, commands,
 };
 pub use dr_cache::CacheConfig;
 pub use dr_model::{
-    Activity, Channel, ChannelId, ChannelType, GuildBan, GuildId, Intents, JsonErrorCode, Member, Message, MessageId,
-    PermissionOverwrite, Permissions, PresenceStatus, RequestGuildMembers, Role, RoleId, UpdatePresence, UserId,
-    Webhook, WebhookId,
+    Activity, AutoModAction, Channel, ChannelId, ChannelType, GuildBan, GuildId, Intents, JsonErrorCode, Member,
+    Message, MessageId, PermissionOverwrite, Permissions, PresenceStatus, RequestGuildMembers, Role, RoleId,
+    UpdatePresence, UserId, Webhook, WebhookId,
 };
-pub use dr_rest::api::{ArchivedThreadPage, MessagePage, ThreadMemberPage, UserPage};
+pub use dr_rest::api::{ArchivedThreadPage, MessagePage, ThreadMemberPage, UserPage, VoterPage};
+pub use dr_rest::api::{AuditLogQuery, EventUserPage};

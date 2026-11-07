@@ -103,6 +103,7 @@ impl ShardHandle {
         }
         let text = match command {
             GatewayCommand::UpdatePresence(p) => serde_json::to_string(&GatewayFrame::presence(p))?,
+            GatewayCommand::UpdateVoiceState(v) => serde_json::to_string(&GatewayFrame::voice_state(v))?,
             GatewayCommand::RequestGuildMembers(r) => serde_json::to_string(&GatewayFrame::request_guild_members(r))?,
             GatewayCommand::Raw { op, d } => serde_json::to_string(&GatewayFrame { op, d })?,
         };

@@ -99,6 +99,8 @@ impl Message {
             call: None,
             shared_client_theme: None,
             resolved: None,
+            poll: None,
+            sticker_items: Vec::new(),
         }
     }
 

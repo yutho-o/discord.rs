@@ -45,6 +45,7 @@ pub(crate) type Sent = (u64, String, Value);
 pub struct GatewayState {
     pub(crate) world: Arc<World>,
     pub(crate) url: String,
+    pub(crate) voice_url: String,
     pub(crate) frames: Mutex<Vec<RecordedFrame>>,
     pub(crate) open: Mutex<Vec<mpsc::Sender<Command>>>,
     pub(crate) pending: Mutex<Vec<Command>>,
@@ -58,10 +59,11 @@ pub struct GatewayState {
 }
 
 impl GatewayState {
-    pub(crate) fn new(world: Arc<World>, url: String) -> Self {
+    pub(crate) fn new(world: Arc<World>, url: String, voice_url: String) -> Self {
         Self {
             world,
             url,
+            voice_url,
             frames: Mutex::new(Vec::new()),
             open: Mutex::new(Vec::new()),
             pending: Mutex::new(Vec::new()),

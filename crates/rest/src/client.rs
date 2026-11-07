@@ -1,6 +1,9 @@
 //! `Rest`, `RestBuilder` and `RestConfig`.
 
-use crate::api::{ApplicationCommandsApi, ChannelsApi, GatewayApi, GuildsApi, InteractionsApi, UsersApi, WebhooksApi};
+use crate::api::{
+    ApplicationCommandsApi, AutoModApi, ChannelsApi, ExpressionsApi, GatewayApi, GuildsApi, InteractionsApi,
+    ScheduledEventsApi, StageInstancesApi, UsersApi, WebhooksApi,
+};
 use crate::limit::Limiter;
 use crate::request::{Method, Request, RequestParts};
 use crate::transport::{RawResponse, ReqwestTransport, Transport};
@@ -103,6 +106,26 @@ impl Rest {
     /// Channel and message endpoints.
     pub fn channels(&self) -> ChannelsApi<'_> {
         ChannelsApi(self)
+    }
+
+    /// Emoji and sticker endpoints.
+    pub fn expressions(&self) -> ExpressionsApi<'_> {
+        ExpressionsApi(self)
+    }
+
+    /// Guild scheduled event endpoints.
+    pub fn scheduled_events(&self) -> ScheduledEventsApi<'_> {
+        ScheduledEventsApi(self)
+    }
+
+    /// Stage instance endpoints.
+    pub fn stage_instances(&self) -> StageInstancesApi<'_> {
+        StageInstancesApi(self)
+    }
+
+    /// Auto moderation endpoints.
+    pub fn automod(&self) -> AutoModApi<'_> {
+        AutoModApi(self)
     }
 
     /// User endpoints.

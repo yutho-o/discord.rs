@@ -4,10 +4,12 @@ use super::GatewayEvent;
 use crate::interactions::Interaction;
 use crate::{Bound, Deleted, Updated};
 use dr_model::{
-    Channel, Guild, GuildBanEvent, GuildMemberRemoveEvent, GuildMembersChunkEvent, GuildRoleDeleteEvent,
-    GuildRoleEvent, Intents, Member, Message, MessageDeleteBulkEvent, MessageDeleteEvent, MessageReactionAddEvent,
-    MessageReactionRemoveEvent, ReadyEvent, Role, ThreadDeleteEvent, ThreadListSyncEvent, ThreadMemberUpdateEvent,
-    ThreadMembersUpdateEvent, UnavailableGuild, WebhooksUpdateEvent,
+    AuditLogEntryCreateEvent, AutoModActionExecutionEvent, AutoModRule, Channel, Guild, GuildBanEvent,
+    GuildEmojisUpdateEvent, GuildMemberRemoveEvent, GuildMembersChunkEvent, GuildRoleDeleteEvent, GuildRoleEvent,
+    GuildScheduledEvent, GuildStickersUpdateEvent, Intents, Member, Message, MessageDeleteBulkEvent,
+    MessageDeleteEvent, MessagePollVoteEvent, MessageReactionAddEvent, MessageReactionRemoveEvent, ReadyEvent, Role,
+    ScheduledEventUserEvent, StageInstance, ThreadDeleteEvent, ThreadListSyncEvent, ThreadMemberUpdateEvent,
+    ThreadMembersUpdateEvent, UnavailableGuild, VoiceServerUpdateEvent, VoiceState, WebhooksUpdateEvent,
 };
 
 macro_rules! event {
@@ -24,6 +26,7 @@ macro_rules! event {
 }
 
 const MESSAGES: Intents = Intents::GUILD_MESSAGES.union(Intents::DIRECT_MESSAGES);
+const POLLS: Intents = Intents::GUILD_MESSAGE_POLLS.union(Intents::DIRECT_MESSAGE_POLLS);
 const REACTIONS: Intents = Intents::GUILD_MESSAGE_REACTIONS.union(Intents::DIRECT_MESSAGE_REACTIONS);
 
 event!(
@@ -150,4 +153,105 @@ event!(
     /// A part of the answer to a request for guild members, such as `members().fetch_all()`. The
     /// members are in the cache before handlers run.
     GuildMembersChunk, "GUILD_MEMBERS_CHUNK", Intents::empty(), Bound<GuildMembersChunkEvent>
+);
+
+event!(
+    /// Someone joined, left or moved between voice channels, or muted or deafened. `old` is where
+    /// they were, when the cache knew.
+    VoiceStateUpdate, "VOICE_STATE_UPDATE", Intents::GUILD_VOICE_STATES, Updated<VoiceState>
+);
+
+event!(
+    /// The bot's voice server for a guild, after it joins or when Discord moves it. The `voice`
+    /// feature acts on it by itself.
+    VoiceServerUpdate, "VOICE_SERVER_UPDATE", Intents::empty(), Bound<VoiceServerUpdateEvent>
+);
+
+event!(
+    /// Someone voted for an answer of a poll. The cached message's poll results do not follow.
+    MessagePollVoteAdd, "MESSAGE_POLL_VOTE_ADD", POLLS, Bound<MessagePollVoteEvent>
+);
+
+event!(
+    /// Someone took back their vote for an answer of a poll.
+    MessagePollVoteRemove, "MESSAGE_POLL_VOTE_REMOVE", POLLS, Bound<MessagePollVoteEvent>
+);
+
+event!(
+    /// A guild's emojis changed. The event holds the whole new list, and the cache follows.
+    GuildEmojisUpdate, "GUILD_EMOJIS_UPDATE", Intents::GUILD_EXPRESSIONS, Updated<GuildEmojisUpdateEvent>
+);
+
+event!(
+    /// A guild's stickers changed. The event holds the whole new list, and the cache follows.
+    GuildStickersUpdate, "GUILD_STICKERS_UPDATE", Intents::GUILD_EXPRESSIONS, Updated<GuildStickersUpdateEvent>
+);
+
+event!(
+    /// A scheduled event was created.
+    GuildScheduledEventCreate, "GUILD_SCHEDULED_EVENT_CREATE", Intents::GUILD_SCHEDULED_EVENTS, Bound<GuildScheduledEvent>
+);
+
+event!(
+    /// A scheduled event changed, started or ended. `old` is the event as cached.
+    GuildScheduledEventUpdate, "GUILD_SCHEDULED_EVENT_UPDATE", Intents::GUILD_SCHEDULED_EVENTS, Updated<GuildScheduledEvent>
+);
+
+event!(
+    /// A scheduled event was deleted.
+    GuildScheduledEventDelete, "GUILD_SCHEDULED_EVENT_DELETE", Intents::GUILD_SCHEDULED_EVENTS,
+    Deleted<GuildScheduledEvent, GuildScheduledEvent>
+);
+
+event!(
+    /// Someone became interested in a scheduled event.
+    GuildScheduledEventUserAdd, "GUILD_SCHEDULED_EVENT_USER_ADD", Intents::GUILD_SCHEDULED_EVENTS,
+    Bound<ScheduledEventUserEvent>
+);
+
+event!(
+    /// Someone was no longer interested in a scheduled event.
+    GuildScheduledEventUserRemove, "GUILD_SCHEDULED_EVENT_USER_REMOVE", Intents::GUILD_SCHEDULED_EVENTS,
+    Bound<ScheduledEventUserEvent>
+);
+
+event!(
+    /// A stage channel went live.
+    StageInstanceCreate, "STAGE_INSTANCE_CREATE", Intents::GUILDS, Bound<StageInstance>
+);
+
+event!(
+    /// A live stage changed. `old` is the stage as cached.
+    StageInstanceUpdate, "STAGE_INSTANCE_UPDATE", Intents::GUILDS, Updated<StageInstance>
+);
+
+event!(
+    /// A live stage ended.
+    StageInstanceDelete, "STAGE_INSTANCE_DELETE", Intents::GUILDS, Deleted<StageInstance, StageInstance>
+);
+
+event!(
+    /// An auto moderation rule was created.
+    AutoModerationRuleCreate, "AUTO_MODERATION_RULE_CREATE", Intents::AUTO_MODERATION_CONFIGURATION, Bound<AutoModRule>
+);
+
+event!(
+    /// An auto moderation rule changed. The event holds the new rule only: rules are not cached.
+    AutoModerationRuleUpdate, "AUTO_MODERATION_RULE_UPDATE", Intents::AUTO_MODERATION_CONFIGURATION, Bound<AutoModRule>
+);
+
+event!(
+    /// An auto moderation rule was deleted.
+    AutoModerationRuleDelete, "AUTO_MODERATION_RULE_DELETE", Intents::AUTO_MODERATION_CONFIGURATION, Bound<AutoModRule>
+);
+
+event!(
+    /// An auto moderation rule triggered and ran one of its actions. One event per action.
+    AutoModerationActionExecution, "AUTO_MODERATION_ACTION_EXECUTION", Intents::AUTO_MODERATION_EXECUTION,
+    Bound<AutoModActionExecutionEvent>
+);
+
+event!(
+    /// An entry was added to a guild's audit log. Needs `VIEW_AUDIT_LOG` as well as the intent.
+    GuildAuditLogEntryCreate, "GUILD_AUDIT_LOG_ENTRY_CREATE", Intents::GUILD_MODERATION, Bound<AuditLogEntryCreateEvent>
 );

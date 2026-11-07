@@ -3,8 +3,7 @@
 //! `packages/discord.js/src/structures/{Guild,GuildMember,Role}.js` (Apache-2.0).
 //! Changed: translated to Rust; role tags read as `bool`, `ARCHITECTURE.md` 10.3.
 //!
-//! Left out for now, because the features they belong to are not ported yet: `stickers`,
-//! `presences`, `voice_states`, `stage_instances`, `guild_scheduled_events` and
+//! Left out for now, because the features they belong to are not ported yet: `presences` and
 //! `soundboard_sounds`. Such keys are ignored on read. So are integrations, previews, widgets,
 //! onboarding and templates, which no route returns yet.
 
@@ -205,6 +204,15 @@ pub struct Guild {
     /// Custom emoji.
     #[serde(default, deserialize_with = "null_default")]
     pub emojis: Vec<Emoji>,
+    /// Custom stickers.
+    #[serde(default, deserialize_with = "null_default", skip_serializing_if = "Vec::is_empty")]
+    pub stickers: Vec<crate::Sticker>,
+    /// Scheduled events, on `GUILD_CREATE`. The cache moves them to their own table.
+    #[serde(default, deserialize_with = "null_default", skip_serializing_if = "Vec::is_empty")]
+    pub guild_scheduled_events: Vec<crate::GuildScheduledEvent>,
+    /// Live stages, on `GUILD_CREATE`. The cache moves them to their own table.
+    #[serde(default, deserialize_with = "null_default", skip_serializing_if = "Vec::is_empty")]
+    pub stage_instances: Vec<crate::StageInstance>,
     /// Enabled features. Unknown ones are kept.
     #[serde(default, deserialize_with = "null_default")]
     pub features: Vec<GuildFeature>,
@@ -301,6 +309,9 @@ pub struct Guild {
     /// Active threads the bot can see, `GUILD_CREATE` only.
     #[serde(default, deserialize_with = "null_default", skip_serializing_if = "Vec::is_empty")]
     pub threads: Vec<Channel>,
+    /// Who is in a voice channel, `GUILD_CREATE` only. Needs the `GUILD_VOICE_STATES` intent.
+    #[serde(default, deserialize_with = "null_default", skip_serializing_if = "Vec::is_empty")]
+    pub voice_states: Vec<crate::VoiceState>,
 }
 
 impl Guild {
@@ -326,6 +337,9 @@ impl Guild {
             explicit_content_filter: None,
             roles: Vec::new(),
             emojis: Vec::new(),
+            stickers: Vec::new(),
+            guild_scheduled_events: Vec::new(),
+            stage_instances: Vec::new(),
             features: Vec::new(),
             mfa_level: None,
             application_id: None,
@@ -358,6 +372,7 @@ impl Guild {
             channels: Vec::new(),
             members: Vec::new(),
             threads: Vec::new(),
+            voice_states: Vec::new(),
         }
     }
 

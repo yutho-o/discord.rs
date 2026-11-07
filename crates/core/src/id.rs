@@ -44,6 +44,15 @@ pub mod marker {
         CommandMarker,
         InteractionMarker,
         IntegrationMarker,
+        StickerMarker,
+        StickerPackMarker,
+        ScheduledEventMarker,
+        AutoModRuleMarker,
+        AuditLogEntryMarker,
+        StageInstanceMarker,
+        SkuMarker,
+        EntitlementMarker,
+        SubscriptionMarker,
         GenericMarker,
     );
 }

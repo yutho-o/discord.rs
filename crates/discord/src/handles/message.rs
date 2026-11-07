@@ -3,8 +3,9 @@
 use crate::handles::{ChannelHandle, GuildHandle, UserHandle};
 use crate::{Bound, Call, Client, Error};
 use dr_builders::{CreateMessage, CreateThread, EditMessage};
-use dr_model::{Channel, ChannelId, Message, Nonce, UserId};
+use dr_model::{Channel, ChannelId, Message, Nonce, PollAnswerVoters, UserId};
 use dr_rest::RetryClass;
+use dr_rest::api::VoterPage;
 use futures::future::BoxFuture;
 use std::future::IntoFuture;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -104,6 +105,20 @@ impl Bound<Message> {
     /// Removes every reaction. Needs `MANAGE_MESSAGES`.
     pub fn clear_reactions(&self) -> Call<()> {
         let request = self.client().rest().channels().delete_all_message_reactions(self.channel_id, self.id);
+        Call::new(self.client().clone(), request)
+    }
+
+    /// The users who chose `answer` in this message's poll, one page of them. Answers are numbered
+    /// from 1.
+    pub fn poll_voters(&self, answer: u32, page: VoterPage) -> Call<Bound<PollAnswerVoters>> {
+        let request = self.client().rest().channels().get_poll_answer_voters(self.channel_id, self.id, answer, page);
+        Call::new(self.client().clone(), request)
+    }
+
+    /// Ends this message's poll now. Only its author can, so the bot must have sent it. The result
+    /// has the final counts once Discord has tallied them.
+    pub fn end_poll(&self) -> Call<Bound<Message>> {
+        let request = self.client().rest().channels().expire_poll(self.channel_id, self.id);
         Call::new(self.client().clone(), request)
     }
 

@@ -1,8 +1,9 @@
-//! `Bound<MessageReactionAddEvent>` and `Bound<MessageReactionRemoveEvent>`.
+//! `Bound<MessageReactionAddEvent>`, `Bound<MessageReactionRemoveEvent>` and
+//! `Bound<MessagePollVoteEvent>`, which all name a user, a message and its channel.
 
 use crate::handles::{ChannelHandle, GuildHandle, UserHandle};
 use crate::{Bound, Call};
-use dr_model::{Message, MessageReactionAddEvent, MessageReactionRemoveEvent};
+use dr_model::{Message, MessagePollVoteEvent, MessageReactionAddEvent, MessageReactionRemoveEvent};
 
 macro_rules! reaction_event {
     ($event:ty) => {
@@ -17,7 +18,7 @@ macro_rules! reaction_event {
                 self.guild_id.map(|g| self.client().guild(g))
             }
 
-            /// The user who reacted, as a handle.
+            /// The user who reacted or voted, as a handle.
             pub fn user(&self) -> UserHandle {
                 self.client().user(self.user_id)
             }
@@ -32,3 +33,4 @@ macro_rules! reaction_event {
 
 reaction_event!(MessageReactionAddEvent);
 reaction_event!(MessageReactionRemoveEvent);
+reaction_event!(MessagePollVoteEvent);

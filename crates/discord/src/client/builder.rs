@@ -265,6 +265,8 @@ impl<S: Send + Sync + 'static> ClientBuilder<S> {
             queue: OnceLock::new(),
             lifecycle: Lifecycle::default(),
             collectors: crate::collector::Collectors::default(),
+            #[cfg(feature = "voice")]
+            voice: Default::default(),
         };
         Ok(Runner { client: Client(Arc::new(inner)) })
     }

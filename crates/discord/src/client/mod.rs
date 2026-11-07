@@ -40,6 +40,8 @@ pub(crate) struct ClientInner {
     pub(crate) queue: OnceLock<Arc<ShardQueue>>,
     pub(crate) lifecycle: Lifecycle,
     pub(crate) collectors: crate::collector::Collectors,
+    #[cfg(feature = "voice")]
+    pub(crate) voice: crate::voice::VoiceRegistry,
 }
 
 /// The client: REST, cache and gateway together. Not generic, and cheap to clone. Your state lives in

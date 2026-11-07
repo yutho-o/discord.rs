@@ -3,7 +3,7 @@
 //! `GatewayMessageEventExtraFields` and the interaction records of `_interactions/base.ts`.
 //!
 //! Checked field by field against those files. What upstream has and this file leaves out, on
-//! purpose: the cut features `poll`, `sticker_items`, `stickers`, `thread` and
+//! purpose: the cut features `thread` and
 //! `role_subscription_data`; `Message.application` and `Attachment.application`, because the proof
 //! of concept has no `Application` struct; and `APIMessageSnapshot.guild_id`, which upstream marks as
 //! not existing on the real API. All of them are ignored on read, like any unknown key.
@@ -134,6 +134,12 @@ pub struct Message {
     /// another, hence the depth limit.
     #[serde(default, deserialize_with = "crate::message_ext::bounded_depth", skip_serializing_if = "Option::is_none")]
     pub resolved: Option<Box<ResolvedData>>,
+    /// The poll, on a message that has one. Its `results` do not follow vote events in the cache.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub poll: Option<Box<crate::Poll>>,
+    /// The stickers sent with it.
+    #[serde(default, deserialize_with = "null_default", skip_serializing_if = "Vec::is_empty")]
+    pub sticker_items: Vec<crate::StickerItem>,
 }
 
 const fn default_message_type() -> MessageType {

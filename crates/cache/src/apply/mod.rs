@@ -9,6 +9,9 @@ pub mod guild;
 pub mod member;
 pub mod message;
 pub mod role;
+pub mod scheduled_event;
+pub mod stage;
+pub mod voice;
 
 use dr_model::ReadyEvent;
 use std::sync::Arc;

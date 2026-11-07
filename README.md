@@ -21,7 +21,8 @@ cargo run -p discord-rust --example basic_bot
 ```
 
 `docs/STATUS.md` has the detailed steps and what to check, and `examples/moderation_bot.rs` shows bans,
-timeouts, roles and permission checks. A bot looks like this:
+timeouts, roles and permission checks. The `voice` feature adds voice channels, and
+`examples/voice_bot.rs` plays a file in one. A bot looks like this:
 
 ```rust,no_run
 use discord::prelude::*;
