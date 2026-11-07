@@ -1,0 +1,38 @@
+[package]
+name = "discord-rust-rest"
+description = "Rate limited Discord REST client for discord.rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "dr_rest"
+
+[lints]
+workspace = true
+
+[dependencies]
+dr-core.workspace = true
+dr-model.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
+webpki-roots.workspace = true
+bytes.workspace = true
+futures.workspace = true
+tokio = { workspace = true, features = ["rt", "time", "sync", "macros"] }
+percent-encoding.workspace = true
+form_urlencoded.workspace = true
+rand.workspace = true
+parking_lot.workspace = true
+hashbrown.workspace = true
+foldhash.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+dr-mock.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "test-util"] }

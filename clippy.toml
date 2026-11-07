@@ -1,0 +1,7 @@
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+disallowed-methods = [
+    { path = "tokio::sync::mpsc::unbounded_channel", reason = "every queue is bounded, see ARCHITECTURE 7.9" },
+    { path = "rustls::crypto::CryptoProvider::install_default", reason = "pass the provider explicitly, see ARCHITECTURE 5.3" },
+]

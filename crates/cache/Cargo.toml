@@ -1,0 +1,25 @@
+[package]
+name = "discord-rust-cache"
+description = "In-memory Discord state cache for discord.rs. No async runtime."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "dr_cache"
+
+[lints]
+workspace = true
+
+[dependencies]
+dr-core.workspace = true
+dr-model.workspace = true
+parking_lot.workspace = true
+hashbrown.workspace = true
+foldhash.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+serde.workspace = true

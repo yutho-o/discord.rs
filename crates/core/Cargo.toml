@@ -1,0 +1,23 @@
+[package]
+name = "discord-rust-core"
+description = "Ids, open enums, wire helpers and request body types shared by the discord.rs crates"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "dr_core"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde_path_to_error.workspace = true
+bitflags.workspace = true
+compact_str.workspace = true
+bytes.workspace = true
+thiserror.workspace = true

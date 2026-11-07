@@ -1,0 +1,38 @@
+//! Request bodies and nested data builders. No tokio. Naming, `ARCHITECTURE.md` 7.1: request bodies
+//! are verb-noun (`CreateMessage`, `EditMessage`), nested data keeps the upstream `*Builder` name
+//! (`EmbedBuilder`, `ActionRowBuilder`, `SlashCommandBuilder`).
+//!
+//! Setters take a bare noun. Validation is hand-written and runs at send time, through
+//! [`dr_core::IntoBody`], so a failure surfaces at `.await` with nothing sent. `.skip_validation()`
+//! is per request. Lengths are code points (`chars().count()`), and the embed total of 6000 is
+//! UTF-16 units. Rules are in `[types 4.3]`.
+
+pub mod command;
+pub mod component;
+pub mod embed;
+pub mod message;
+pub mod modal;
+
+pub use command::{
+    BooleanOption, ChannelOption, CommandData, CommandList, CommandOption, IntegerOption, Leaf, MessageContextCommand,
+    Parent, RoleOption, SlashCommandBuilder, StringOption, Subcommand, Unset, UserContextCommand, UserOption,
+};
+pub use component::{ActionRowBuilder, ButtonBuilder, StringSelectBuilder, StringSelectOption, TextInputBuilder};
+pub use embed::EmbedBuilder;
+pub use message::{AllowedMentions, CreateMessage, EditMessage, reply_reference};
+pub use modal::ModalBuilder;
+
+/// Fails unless `value` has between `min` and `max` code points.
+pub(crate) fn check_len(path: &str, value: &str, min: usize, max: usize) -> Result<(), dr_core::ValidationError> {
+    let n = value.chars().count();
+    if n < min || n > max {
+        return Err(dr_core::ValidationError::new(path, format!("must be {min} to {max} characters, got {n}")));
+    }
+    Ok(())
+}
+
+/// Adds `prefix` in front of the path of an error from a nested value.
+pub(crate) fn nested(prefix: String, e: dr_core::ValidationError) -> dr_core::ValidationError {
+    let path = if e.path.is_empty() { prefix } else { format!("{prefix}.{}", e.path) };
+    dr_core::ValidationError::new(path, e.message)
+}

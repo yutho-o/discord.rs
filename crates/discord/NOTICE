@@ -1,0 +1,16 @@
+discord.rs
+Copyright 2026 the discord.rs contributors
+
+This product is a Rust port of discord.js and includes work derived from it.
+discord.js is licensed under the Apache License, Version 2.0.
+  Copyright 2021 Noel Buechler
+  Copyright 2015 Amish Shah
+Per-package copyright lines are listed in THIRD_PARTY_NOTICES.md.
+
+Generated data types derive from discord-api-types, MIT License.
+  Copyright (c) 2020 vladfrangu
+
+Voice demuxing behaviour derives from prism-media, Apache License, Version 2.0.
+  Copyright 2019 - 2020 Amish Shah
+
+This project is not affiliated with or endorsed by Discord Inc. or the discord.js project.

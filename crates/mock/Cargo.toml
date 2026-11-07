@@ -1,0 +1,27 @@
+[package]
+name = "discord-rust-mock"
+description = "Loopback mock of the Discord REST API and gateway, the test kit of discord.rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "dr_mock"
+
+[lints]
+workspace = true
+
+[dependencies]
+dr-core.workspace = true
+dr-model.workspace = true
+axum.workspace = true
+tokio-tungstenite.workspace = true
+futures.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "time", "sync", "macros", "net", "io-util"] }
+serde.workspace = true
+serde_json.workspace = true
+flate2.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
