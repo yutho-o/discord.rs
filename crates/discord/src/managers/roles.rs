@@ -1,7 +1,8 @@
 //! The roles of one guild.
 
 use crate::handles::RoleHandle;
-use crate::{Bound, Client};
+use crate::{Bound, Call, Client};
+use dr_builders::CreateRole;
 use dr_model::{GuildId, Role, RoleId};
 
 /// The roles of one guild. Get one from `GuildHandle::roles`.
@@ -19,6 +20,16 @@ impl RolesManager {
     /// A handle to a role. No I/O.
     pub fn handle(&self, id: RoleId) -> RoleHandle {
         RoleHandle::new(self.client.clone(), self.guild, id)
+    }
+
+    /// Every role of this guild, from Discord.
+    pub fn fetch_all(&self) -> Call<Vec<Bound<Role>>> {
+        Call::new(self.client.clone(), self.client.rest().guilds().get_roles(self.guild))
+    }
+
+    /// Creates a role. Use `.reason(...)` for the audit log.
+    pub fn create(&self, body: CreateRole) -> Call<Bound<Role>> {
+        Call::new(self.client.clone(), self.client.rest().guilds().create_role(self.guild, body))
     }
 
     /// The role from the cache. No I/O.

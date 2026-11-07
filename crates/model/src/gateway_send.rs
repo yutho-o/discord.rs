@@ -53,7 +53,7 @@ pub struct Identify {
     pub token: Secret,
     /// Client description.
     pub properties: IdentifyProperties,
-    /// Whether `compress: true` per-payload compression is on. Always false in the proof of concept.
+    /// Whether `compress: true` per-payload compression is on. Always false for now.
     #[serde(default)]
     pub compress: bool,
     /// Offline member threshold, from 50 to 250. Written only when set. Discord defaults to 50.
@@ -117,6 +117,20 @@ pub struct UpdatePresence {
     pub afk: bool,
 }
 
+impl UpdatePresence {
+    /// A presence with this status and no activity.
+    pub fn new(status: PresenceStatus) -> Self {
+        Self { since: None, activities: Vec::new(), status, afk: false }
+    }
+
+    /// Adds an activity.
+    #[must_use]
+    pub fn activity(mut self, activity: Activity) -> Self {
+        self.activities.push(activity);
+        self
+    }
+}
+
 /// One activity in a presence update.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Activity {
@@ -135,6 +149,40 @@ pub struct Activity {
 }
 
 impl Activity {
+    fn of_kind(kind: u16, name: impl Into<String>) -> Self {
+        Self { name: name.into(), kind, state: None, url: None }
+    }
+
+    /// "Playing {name}".
+    pub fn playing(name: impl Into<String>) -> Self {
+        Self::of_kind(Self::PLAYING, name)
+    }
+
+    /// "Listening to {name}".
+    pub fn listening(name: impl Into<String>) -> Self {
+        Self::of_kind(Self::LISTENING, name)
+    }
+
+    /// "Watching {name}".
+    pub fn watching(name: impl Into<String>) -> Self {
+        Self::of_kind(Self::WATCHING, name)
+    }
+
+    /// "Competing in {name}".
+    pub fn competing(name: impl Into<String>) -> Self {
+        Self::of_kind(Self::COMPETING, name)
+    }
+
+    /// "Streaming {name}", with a link to the stream.
+    pub fn streaming(name: impl Into<String>, url: impl Into<String>) -> Self {
+        Self { url: Some(url.into()), ..Self::of_kind(Self::STREAMING, name) }
+    }
+
+    /// A custom status showing this text.
+    pub fn custom(text: impl Into<String>) -> Self {
+        Self { state: Some(text.into()), ..Self::of_kind(Self::CUSTOM, "Custom Status") }
+    }
+
     /// Kind "Playing {name}".
     pub const PLAYING: u16 = 0;
     /// Kind "Streaming {name}", the kind that uses `url`.
@@ -158,5 +206,54 @@ open_str! {
         Idle = "idle",
         Invisible = "invisible",
         Offline = "offline",
+    }
+}
+
+/// Op 8 body: asks for the members of a guild, answered by `GUILD_MEMBERS_CHUNK` events. Set either
+/// `query` (with `limit`) or `user_ids`. Listing every member needs the `GUILD_MEMBERS` intent,
+/// and presences need `GUILD_PRESENCES`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RequestGuildMembers {
+    /// Guild id.
+    pub guild_id: crate::GuildId,
+    /// Usernames that start with this. An empty string with `limit` 0 means every member.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    /// The most members to send, 0 for no limit when listing every member.
+    #[serde(default)]
+    pub limit: u32,
+    /// Whether to send their presences too.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub presences: bool,
+    /// Exactly these users, up to 100.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_ids: Option<Vec<crate::UserId>>,
+    /// Comes back in each chunk, to match them to this request. At most 32 bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
+}
+
+impl RequestGuildMembers {
+    /// Every member of the guild.
+    pub fn all(guild_id: crate::GuildId) -> Self {
+        Self { guild_id, query: Some(String::new()), limit: 0, presences: false, user_ids: None, nonce: None }
+    }
+
+    /// Members whose username starts with `query`, at most `limit`.
+    pub fn search(guild_id: crate::GuildId, query: impl Into<String>, limit: u32) -> Self {
+        Self { guild_id, query: Some(query.into()), limit, presences: false, user_ids: None, nonce: None }
+    }
+
+    /// These users, at most 100.
+    pub fn users(guild_id: crate::GuildId, ids: impl IntoIterator<Item = crate::UserId>) -> Self {
+        let ids = ids.into_iter().collect();
+        Self { guild_id, query: None, limit: 0, presences: false, user_ids: Some(ids), nonce: None }
+    }
+}
+
+impl GatewayFrame<RequestGuildMembers> {
+    /// An op 8 frame.
+    pub fn request_guild_members(d: RequestGuildMembers) -> Self {
+        Self { op: GatewayOpcode::REQUEST_GUILD_MEMBERS.get(), d }
     }
 }

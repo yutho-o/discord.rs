@@ -26,6 +26,8 @@ struct Connection {
     session: Option<String>,
     seq: u64,
     shard: u32,
+    /// The shard count of its identify. 1 until then.
+    shard_count: u32,
     stalled: bool,
     /// Dispatches scripted before this connection identified.
     held: Vec<(String, Value)>,
@@ -66,6 +68,7 @@ async fn serve(
         session: None,
         seq: 0,
         shard: 0,
+        shard_count: 1,
         stalled: false,
         held: Vec::new(),
     };
@@ -91,6 +94,7 @@ async fn serve(
             },
             Some(command) = inbox.recv() => conn.command(command).await,
             event = world.recv() => match event {
+                Ok(event) if !conn.owns(&event.t, &event.d) => true,
                 Ok(event) => conn.dispatch(event.t, event.d).await,
                 Err(broadcast::error::RecvError::Lagged(_)) => true,
                 Err(broadcast::error::RecvError::Closed) => false,
@@ -103,6 +107,14 @@ async fn serve(
 }
 
 impl Connection {
+    /// Whether an event is for this shard: the one of its guild, shard 0 when it has none.
+    fn owns(&self, t: &str, d: &Value) -> bool {
+        let guild_field = if matches!(t, "GUILD_CREATE" | "GUILD_UPDATE" | "GUILD_DELETE") { "id" } else { "guild_id" };
+        let guild = d.get(guild_field).and_then(Value::as_str).and_then(|s| s.parse::<u64>().ok());
+        let shard = guild.map_or(0, |g| (g >> 22) % u64::from(self.shard_count.max(1)));
+        shard == u64::from(self.shard)
+    }
+
     /// Sends one payload. False when the connection is gone.
     async fn send(&mut self, payload: &Value) -> bool {
         if self.stalled {
@@ -176,6 +188,8 @@ impl Connection {
             && let Some(shard) = d.pointer("/shard/0").and_then(Value::as_u64).and_then(|s| u32::try_from(s).ok())
         {
             self.shard = shard;
+            self.shard_count =
+                d.pointer("/shard/1").and_then(Value::as_u64).and_then(|s| u32::try_from(s).ok()).unwrap_or(1).max(1);
         }
         self.state.frames.lock().push(RecordedFrame { shard: self.shard, op, d: d.clone() });
         match op {
@@ -186,12 +200,63 @@ impl Connection {
             }
             2 => self.identify(&d).await,
             6 => self.resume(&d).await,
-            3 | 4 | 8 | 31 => true,
+            8 => self.request_members(&d).await,
+            3 | 4 | 31 => true,
             _ => {
                 self.close(4001).await;
                 false
             }
         }
+    }
+
+    /// Op 8: answers with `GUILD_MEMBERS_CHUNK` events, as Discord does: every member, those whose
+    /// username starts with `query` (up to `limit`), or the `user_ids` named.
+    async fn request_members(&mut self, d: &Value) -> bool {
+        let snowflake = |v: &Value| v.as_str().and_then(|s| s.parse::<u64>().ok());
+        let Some(guild) = d.get("guild_id").and_then(snowflake) else {
+            self.close(4001).await;
+            return false;
+        };
+        let world = self.state.world.clone();
+        let all = world.members(guild, usize::MAX, 0);
+        let user_of = |m: &Value| m.pointer("/user/id").and_then(snowflake);
+        let mut not_found = Vec::new();
+        let members: Vec<Value> = if let Some(ids) = d.get("user_ids").and_then(Value::as_array) {
+            let ids: Vec<u64> = ids.iter().filter_map(snowflake).collect();
+            not_found = ids.iter().filter(|id| world.member(guild, **id).is_none()).map(u64::to_string).collect();
+            all.into_iter().filter(|m| user_of(m).is_some_and(|u| ids.contains(&u))).collect()
+        } else {
+            let query = d.get("query").and_then(Value::as_str).unwrap_or_default().to_lowercase();
+            let limit = d
+                .get("limit")
+                .and_then(Value::as_u64)
+                .filter(|l| *l > 0)
+                .map_or(usize::MAX, |l| usize::try_from(l).unwrap_or(usize::MAX));
+            let name =
+                |m: &Value| m.pointer("/user/username").and_then(Value::as_str).unwrap_or_default().to_lowercase();
+            all.into_iter().filter(|m| name(m).starts_with(&query)).take(limit).collect()
+        };
+        let size = usize::try_from(self.state.chunk_size.load(Ordering::SeqCst)).unwrap_or(1000).max(1);
+        let chunks: Vec<&[Value]> = if members.is_empty() { vec![&[]] } else { members.chunks(size).collect() };
+        let count = chunks.len();
+        for (index, chunk) in chunks.into_iter().enumerate() {
+            let mut body = json!({
+                "guild_id": guild.to_string(),
+                "members": chunk,
+                "chunk_index": index,
+                "chunk_count": count,
+            });
+            if index == 0 && !not_found.is_empty() {
+                body["not_found"] = json!(not_found);
+            }
+            if let Some(nonce) = d.get("nonce") {
+                body["nonce"] = nonce.clone();
+            }
+            if !self.dispatch("GUILD_MEMBERS_CHUNK".to_owned(), body).await {
+                return false;
+            }
+        }
+        true
     }
 
     async fn identify(&mut self, d: &Value) -> bool {
@@ -211,7 +276,9 @@ impl Connection {
         self.seq = 0;
 
         let world = self.state.world.clone();
-        let ids = world.guild_ids();
+        // As on Discord, a shard gets only its own guilds: `(guild_id >> 22) % shard_count`.
+        let (shard, count) = (u64::from(self.shard), u64::from(self.shard_count));
+        let ids: Vec<_> = world.guild_ids().into_iter().filter(|id| (id.get() >> 22) % count == shard).collect();
         let guilds: Vec<Value> = ids.iter().map(|id| json!({"id": id.to_string(), "unavailable": true})).collect();
         let ready = json!({
             "v": 10,
@@ -219,7 +286,7 @@ impl Connection {
             "guilds": guilds,
             "session_id": session,
             "resume_gateway_url": self.state.url,
-            "shard": [self.shard, 1],
+            "shard": [self.shard, self.shard_count],
             "application": {"id": world.application_id().to_string(), "flags": 0},
         });
         if !self.dispatch("READY".to_owned(), ready).await {
@@ -233,7 +300,7 @@ impl Connection {
             }
         }
         for (t, d) in std::mem::take(&mut self.held) {
-            if !self.dispatch(t, d).await {
+            if self.owns(&t, &d) && !self.dispatch(t, d).await {
                 return false;
             }
         }

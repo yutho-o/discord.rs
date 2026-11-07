@@ -4,7 +4,7 @@
 //! The upstream option union is keyed on `type` and has one arm per option kind. It is one flat
 //! struct here, so an unknown option kind decodes like a known one and fields a kind does not have
 //! are `None` or empty. Command permissions and interaction data options are not here: the first
-//! has no endpoint in the proof of concept, and the second is `interaction_options`.
+//! has no endpoint yet, and the second is `interaction_options`.
 
 use crate::{
     ApplicationCommandOptionType, ApplicationCommandType, ApplicationId, ChannelType, CommandId, GenericId, GuildId,

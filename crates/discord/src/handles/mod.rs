@@ -8,11 +8,14 @@ pub mod channel;
 pub mod guild;
 pub mod member;
 pub mod message;
+mod reaction;
 pub mod role;
 pub mod user;
+pub mod webhook;
 
 pub use channel::ChannelHandle;
 pub use guild::GuildHandle;
 pub use message::SendMessageRequest;
 pub use role::RoleHandle;
 pub use user::UserHandle;
+pub use webhook::{WebhookHandle, WebhooksManager};

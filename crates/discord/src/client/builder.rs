@@ -48,6 +48,8 @@ impl ClientBuilder<()> {
                 compression: Compression::default(),
                 presence: None,
                 session_store: None,
+                shard_count: None,
+                shard_ids: None,
                 shutdown_drain: Duration::from_secs(10),
                 queue_limits: QueueLimits::default(),
             },
@@ -111,6 +113,18 @@ impl<S: Send + Sync + 'static> ClientBuilder<S> {
     /// Sets the presence sent at identify.
     pub fn presence(mut self, presence: UpdatePresence) -> Self {
         self.options.presence = Some(presence);
+        self
+    }
+    /// Sets the total number of shards. Without it, the client asks Discord for its recommendation.
+    /// Above 2 500 guilds, Discord requires sharding.
+    pub fn shards(mut self, count: u32) -> Self {
+        self.options.shard_count = Some(count);
+        self
+    }
+    /// Runs only these shards of the total, for a bot split across processes. Each must be below the
+    /// shard count, or `run` fails.
+    pub fn shard_ids(mut self, ids: impl IntoIterator<Item = u32>) -> Self {
+        self.options.shard_ids = Some(ids.into_iter().collect());
         self
     }
     /// Replaces the session store. The default is in memory.
@@ -250,6 +264,7 @@ impl<S: Send + Sync + 'static> ClientBuilder<S> {
             options: self.options,
             queue: OnceLock::new(),
             lifecycle: Lifecycle::default(),
+            collectors: crate::collector::Collectors::default(),
         };
         Ok(Runner { client: Client(Arc::new(inner)) })
     }

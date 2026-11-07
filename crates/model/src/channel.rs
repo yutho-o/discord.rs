@@ -8,7 +8,8 @@
 //! type must decode, so this is not an enum. Unknown `kind` values are kept.
 
 use crate::{
-    ApplicationId, ChannelId, ChannelType, EmojiId, GenericId, GuildId, Member, MessageId, Permissions, User, UserId,
+    ApplicationId, ChannelId, ChannelType, EmojiId, GenericId, GuildId, Member, MessageId, Permissions, RoleId, User,
+    UserId,
 };
 use dr_core::{Timestamp, null_default, open_flags, open_int};
 use serde::{Deserialize, Serialize};
@@ -241,6 +242,18 @@ pub struct PermissionOverwrite {
     pub deny: Permissions,
 }
 
+impl PermissionOverwrite {
+    /// An overwrite for a role. The `@everyone` role has the guild's id.
+    pub fn role(role: RoleId, allow: Permissions, deny: Permissions) -> Self {
+        Self { id: role.cast(), kind: OverwriteType::ROLE, allow, deny }
+    }
+
+    /// An overwrite for one member.
+    pub fn member(user: UserId, allow: Permissions, deny: Permissions) -> Self {
+        Self { id: user.cast(), kind: OverwriteType::MEMBER, allow, deny }
+    }
+}
+
 const fn default_overwrite_type() -> OverwriteType {
     OverwriteType::ROLE
 }
@@ -286,6 +299,20 @@ pub struct ThreadMember {
     /// Guild member data, only when `with_member` was requested.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub member: Option<Member>,
+}
+
+/// A list of threads, as the thread listing endpoints answer.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ThreadList {
+    /// The threads.
+    #[serde(default, deserialize_with = "null_default")]
+    pub threads: Vec<Channel>,
+    /// The bot's membership of those of them it joined.
+    #[serde(default, deserialize_with = "null_default")]
+    pub members: Vec<ThreadMember>,
+    /// Whether an older page exists. Only archived listings send it.
+    #[serde(default)]
+    pub has_more: bool,
 }
 
 /// A tag usable on posts in a thread-only channel.

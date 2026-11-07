@@ -1,5 +1,5 @@
-//! The proof of concept end to end, on the mock, through the public API only: a real socket, zlib,
-//! REST over HTTP, and a bot built the way `examples/poc_bot.rs` builds one.
+//! The client end to end, on the mock, through the public API only: a real socket, zlib,
+//! REST over HTTP, and a bot built the way `examples/basic_bot.rs` builds one.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod common;

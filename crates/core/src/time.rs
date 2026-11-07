@@ -32,6 +32,12 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 }
 
 impl Timestamp {
+    /// The current time, from the system clock.
+    pub fn now() -> Self {
+        let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+        Self(since.map_or(0, |d| i64::try_from(d.as_micros()).unwrap_or(i64::MAX)))
+    }
+
     /// Accepts `YYYY-MM-DDTHH:MM:SS[.f{1,9}](Z|+HH:MM|-HH:MM)`. Never panics on bad input.
     pub fn parse(s: &str) -> Option<Self> {
         let b = s.as_bytes();

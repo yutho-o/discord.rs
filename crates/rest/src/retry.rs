@@ -1,7 +1,6 @@
 //! The retry loop: the body of `Rest::execute`.
 //!
-//! The proof of concept has no REST sublimits, `POC.md` section "Cut": a sublimit 429 falls back to
-//! the normal retry path.
+//! Sublimits are handled in the limiter: see `crate::limit`.
 
 use crate::client::RejectOnRateLimit;
 use crate::error::{RateLimitInfo, RequestSummary, from_response, mask_route};
@@ -97,6 +96,7 @@ async fn attempts(rest: &Rest, parts: &RequestParts, deadline: Option<Instant>) 
     let class = parts.options.retry_class.unwrap_or(RetryClass::for_method(parts.method));
     let route = route_info(parts.method, &parts.path);
     let reject = should_reject(rest, parts, &route);
+    let sublimited = crate::limit::has_sublimit(&route, parts.body.json.as_deref());
     let uses_token = matches!(parts.options.auth, Auth::Default);
     let max_attempts = rest.config().retries.saturating_add(1);
 
@@ -111,7 +111,7 @@ async fn attempts(rest: &Rest, parts: &RequestParts, deadline: Option<Instant>) 
         if invalid::is_open(rest.config().invalid_request_breaker) {
             return Err(RestError::CircuitOpen);
         }
-        let permit = rest.limiter().acquire(&route, reject).await?;
+        let permit = rest.limiter().acquire(&route, reject, sublimited).await?;
         let prepared = encode::prepare(rest.config(), parts)?;
         let send_limit = prepared.timeout;
         used = used.saturating_add(1);

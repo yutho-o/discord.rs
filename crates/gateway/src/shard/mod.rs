@@ -5,10 +5,12 @@
 pub mod close;
 pub mod heartbeat;
 pub mod identify;
+pub mod limiter;
 pub mod send;
 pub mod state;
 pub mod task;
 
+pub use self::limiter::IdentifyLimiter;
 use self::state::Shared;
 use crate::GatewayError;
 use crate::compress::Compression;
@@ -27,10 +29,13 @@ pub struct ShardOptions {
     pub token: Secret,
     /// The intents.
     pub intents: Intents,
-    /// The shard id, always 0 in the proof of concept.
+    /// The shard id, below `shard_count`.
     pub shard_id: u32,
-    /// The shard count, always 1 in the proof of concept.
+    /// The total number of shards of the bot, across every process.
     pub shard_count: u32,
+    /// The identify budget shared with the other shards. `None` spaces this shard's own identifies
+    /// only.
+    pub identify_limiter: Option<Arc<IdentifyLimiter>>,
     /// The transport compression.
     pub compression: Compression,
     /// The WebSocket URL, without a query.
@@ -55,6 +60,7 @@ impl ShardOptions {
             intents,
             shard_id: 0,
             shard_count: 1,
+            identify_limiter: None,
             compression: Compression::default(),
             url: url.into(),
             session: None,
@@ -97,6 +103,7 @@ impl ShardHandle {
         }
         let text = match command {
             GatewayCommand::UpdatePresence(p) => serde_json::to_string(&GatewayFrame::presence(p))?,
+            GatewayCommand::RequestGuildMembers(r) => serde_json::to_string(&GatewayFrame::request_guild_members(r))?,
             GatewayCommand::Raw { op, d } => serde_json::to_string(&GatewayFrame { op, d })?,
         };
         if text.len() > MAX_COMMAND_BYTES {

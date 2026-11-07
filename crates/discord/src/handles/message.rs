@@ -2,8 +2,8 @@
 
 use crate::handles::{ChannelHandle, GuildHandle, UserHandle};
 use crate::{Bound, Call, Client, Error};
-use dr_builders::{CreateMessage, EditMessage};
-use dr_model::{ChannelId, Message, Nonce};
+use dr_builders::{CreateMessage, CreateThread, EditMessage};
+use dr_model::{Channel, ChannelId, Message, Nonce, UserId};
 use dr_rest::RetryClass;
 use futures::future::BoxFuture;
 use std::future::IntoFuture;
@@ -70,6 +70,12 @@ impl Bound<Message> {
         Call::new(self.client().clone(), request)
     }
 
+    /// Starts a thread from this message. The thread's id is the message's id.
+    pub fn start_thread(&self, body: CreateThread) -> Call<Bound<Channel>> {
+        let request = self.client().rest().channels().start_thread_from_message(self.channel_id, self.id, body);
+        Call::new(self.client().clone(), request)
+    }
+
     /// Deletes this message.
     pub fn delete(&self) -> Call<()> {
         let request = self.client().rest().channels().delete_message(self.channel_id, self.id);
@@ -79,6 +85,37 @@ impl Bound<Message> {
     /// Adds the bot's reaction. `emoji` is a unicode emoji, or `name:id` for a custom one.
     pub fn react(&self, emoji: &str) -> Call<()> {
         let request = self.client().rest().channels().add_message_reaction(self.channel_id, self.id, emoji);
+        Call::new(self.client().clone(), request)
+    }
+
+    /// Removes the bot's own reaction.
+    pub fn unreact(&self, emoji: &str) -> Call<()> {
+        let request = self.client().rest().channels().delete_own_message_reaction(self.channel_id, self.id, emoji);
+        Call::new(self.client().clone(), request)
+    }
+
+    /// Removes someone else's reaction. Needs `MANAGE_MESSAGES`.
+    pub fn remove_reaction(&self, emoji: &str, user: UserId) -> Call<()> {
+        let request =
+            self.client().rest().channels().delete_user_message_reaction(self.channel_id, self.id, emoji, user);
+        Call::new(self.client().clone(), request)
+    }
+
+    /// Removes every reaction. Needs `MANAGE_MESSAGES`.
+    pub fn clear_reactions(&self) -> Call<()> {
+        let request = self.client().rest().channels().delete_all_message_reactions(self.channel_id, self.id);
+        Call::new(self.client().clone(), request)
+    }
+
+    /// Pins this message. Use `.reason(...)` for the audit log.
+    pub fn pin(&self) -> Call<()> {
+        let request = self.client().rest().channels().pin_message(self.channel_id, self.id);
+        Call::new(self.client().clone(), request)
+    }
+
+    /// Unpins this message. Use `.reason(...)` for the audit log.
+    pub fn unpin(&self) -> Call<()> {
+        let request = self.client().rest().channels().unpin_message(self.channel_id, self.id);
         Call::new(self.client().clone(), request)
     }
 

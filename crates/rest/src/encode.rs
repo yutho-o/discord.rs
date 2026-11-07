@@ -3,7 +3,8 @@
 use crate::request::{Auth, Method, RequestParts};
 use crate::transport::PreparedRequest;
 use crate::{RestConfig, RestError};
-use dr_core::BodyError;
+use bytes::{BufMut, Bytes, BytesMut};
+use dr_core::{BodyError, RequestBody};
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::Serialize;
 use serde_json::Value;
@@ -68,6 +69,73 @@ fn scalar(value: Value) -> Option<String> {
     }
 }
 
+/// The `Content-Type` and the bytes of a body. JSON alone goes as `application/json`. With files, it
+/// goes as `multipart/form-data`: the JSON as the part `payload_json`, then file `i` of
+/// [`RequestBody::files`] as `files[i]`.
+pub fn encode_body(body: &RequestBody) -> Option<(String, Bytes)> {
+    if body.files.is_empty() {
+        return body.json.clone().map(|json| (String::from("application/json"), json));
+    }
+    let boundary = pick_boundary(body);
+    let mut out = BytesMut::new();
+    if let Some(json) = &body.json {
+        part_header(&mut out, &boundary, "payload_json", None, "application/json");
+        out.put_slice(json);
+        out.put_slice(CRLF);
+    }
+    for (i, file) in body.files.iter().enumerate() {
+        let media = file.content_type.as_deref().filter(|t| is_media_type(t)).unwrap_or("application/octet-stream");
+        part_header(&mut out, &boundary, &format!("files[{i}]"), Some(&file.name), media);
+        out.put_slice(&file.data);
+        out.put_slice(CRLF);
+    }
+    out.put_slice(format!("--{boundary}--").as_bytes());
+    out.put_slice(CRLF);
+    Some((format!("multipart/form-data; boundary={boundary}"), out.freeze()))
+}
+
+const CRLF: &[u8] = b"\r\n";
+
+/// A boundary that appears in no part, so no content can end a part early.
+fn pick_boundary(body: &RequestBody) -> String {
+    let parts: Vec<&[u8]> = body.json.iter().map(|j| &j[..]).chain(body.files.iter().map(|f| &f.data[..])).collect();
+    let mut seed = parts
+        .iter()
+        .fold(0x9e37_79b9_7f4a_7c15_u64, |h, p| h.rotate_left(5) ^ u64::try_from(p.len()).unwrap_or(u64::MAX));
+    loop {
+        let boundary = format!("discord-rs-{seed:016x}");
+        let needle = boundary.as_bytes();
+        if !parts.iter().any(|p| p.windows(needle.len()).any(|w| w == needle)) {
+            return boundary;
+        }
+        seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+    }
+}
+
+fn part_header(out: &mut BytesMut, boundary: &str, name: &str, filename: Option<&str>, media: &str) {
+    out.put_slice(format!("--{boundary}").as_bytes());
+    out.put_slice(CRLF);
+    out.put_slice(format!("Content-Disposition: form-data; name=\"{name}\"").as_bytes());
+    if let Some(filename) = filename {
+        out.put_slice(format!("; filename=\"{}\"", escape_filename(filename)).as_bytes());
+    }
+    out.put_slice(CRLF);
+    out.put_slice(format!("Content-Type: {media}").as_bytes());
+    out.put_slice(CRLF);
+    out.put_slice(CRLF);
+}
+
+/// Escapes a file name the way browsers do in `multipart/form-data`, so that it cannot close the
+/// quoted value or start a new header line.
+fn escape_filename(name: &str) -> String {
+    name.replace('"', "%22").replace('\r', "%0D").replace('\n', "%0A")
+}
+
+/// True for `type/subtype` with optional parameters, in printable ASCII with no new line.
+fn is_media_type(value: &str) -> bool {
+    value.contains('/') && value.bytes().all(|b| (0x20..0x7f).contains(&b))
+}
+
 /// Builds what the transport sends for one attempt, with the headers in the order of
 /// `ARCHITECTURE.md` 10.2: `Content-Type` when there is a body, `User-Agent`, `Authorization` by
 /// [`Auth`], then `X-Audit-Log-Reason`.
@@ -79,11 +147,12 @@ pub fn prepare(config: &RestConfig, parts: &RequestParts) -> Result<PreparedRequ
         url.push('?');
         url.push_str(q);
     }
-    let body = if parts.method == Method::Get { None } else { parts.body.json.clone() };
+    let body = if parts.method == Method::Get { None } else { encode_body(&parts.body) };
     let mut headers = Vec::with_capacity(4);
-    if body.is_some() {
-        headers.push(("Content-Type", String::from("application/json")));
-    }
+    let body = body.map(|(content_type, bytes)| {
+        headers.push(("Content-Type", content_type));
+        bytes
+    });
     headers.push(("User-Agent", config.user_agent.clone()));
     match &parts.options.auth {
         Auth::Default => {

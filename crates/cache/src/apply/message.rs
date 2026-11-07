@@ -2,7 +2,7 @@
 
 use crate::{Cache, Change};
 use dr_core::Patch;
-use dr_model::{Message, MessageDeleteEvent, MessageUpdateEvent};
+use dr_model::{Message, MessageDeleteBulkEvent, MessageDeleteEvent, MessageUpdateEvent};
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -83,6 +83,14 @@ impl Cache {
         }
         let base = Message::partial(event.id, event.channel_id);
         Change { old: None, new: Arc::new(merge(base, event)) }
+    }
+
+    /// `MESSAGE_DELETE_BULK`. Removes every named message the cache holds.
+    pub fn apply_message_delete_bulk(&self, shard: u32, event: &MessageDeleteBulkEvent) {
+        let _ = shard;
+        if let Some(list) = self.messages.get(&event.channel_id) {
+            list.lock().retain(|message| !event.ids.contains(&message.id));
+        }
     }
 
     /// `MESSAGE_DELETE`. Returns the message as it was cached.

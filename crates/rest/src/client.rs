@@ -1,6 +1,6 @@
 //! `Rest`, `RestBuilder` and `RestConfig`.
 
-use crate::api::{ApplicationCommandsApi, ChannelsApi, GatewayApi, GuildsApi, InteractionsApi, UsersApi};
+use crate::api::{ApplicationCommandsApi, ChannelsApi, GatewayApi, GuildsApi, InteractionsApi, UsersApi, WebhooksApi};
 use crate::limit::Limiter;
 use crate::request::{Method, Request, RequestParts};
 use crate::transport::{RawResponse, ReqwestTransport, Transport};
@@ -123,6 +123,11 @@ impl Rest {
     /// Interaction callback and webhook endpoints.
     pub fn interactions(&self) -> InteractionsApi<'_> {
         InteractionsApi(self)
+    }
+
+    /// Webhook endpoints.
+    pub fn webhooks(&self) -> WebhooksApi<'_> {
+        WebhooksApi(self)
     }
 
     /// Application command endpoints.

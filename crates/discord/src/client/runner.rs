@@ -88,7 +88,16 @@ async fn start(client: &Client) -> Result<Arc<ShardQueue>, Error> {
     if let Some(presence) = &options.presence {
         manager = manager.presence(presence.clone());
     }
-    let handle = manager.build().start(queue.clone()).await?;
+    if let Some(count) = options.shard_count {
+        manager = manager.shard_count(count);
+    }
+    if let Some(ids) = &options.shard_ids {
+        manager = manager.shard_ids(ids.iter().copied());
+    }
+    let plan = manager.build().plan().await?;
+    // Before any shard connects, so that no `READY` comes before the tracker knows what to wait for.
+    client.0.ready.expect(plan.shard_ids().iter().copied());
+    let handle = plan.start(queue.clone()).await?;
     let _ = client.0.gateway.set(handle);
     Ok(queue)
 }

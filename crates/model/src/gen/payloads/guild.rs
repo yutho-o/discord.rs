@@ -3,10 +3,10 @@
 //! `packages/discord.js/src/structures/{Guild,GuildMember,Role}.js` (Apache-2.0).
 //! Changed: translated to Rust; role tags read as `bool`, `ARCHITECTURE.md` 10.3.
 //!
-//! Left out on purpose, because the proof of concept cuts the features they belong to: `stickers`,
-//! `threads`, `presences`, `voice_states`, `stage_instances`, `guild_scheduled_events` and
+//! Left out for now, because the features they belong to are not ported yet: `stickers`,
+//! `presences`, `voice_states`, `stage_instances`, `guild_scheduled_events` and
 //! `soundboard_sounds`. Such keys are ignored on read. So are integrations, previews, widgets,
-//! bans, onboarding and templates, which no route of the proof of concept returns.
+//! onboarding and templates, which no route returns yet.
 
 use crate::{
     ApplicationId, AvatarDecorationData, Channel, ChannelId, Collectibles, Emoji, EmojiId, GenericId, GuildFeature,
@@ -298,6 +298,9 @@ pub struct Guild {
     /// Members, `GUILD_CREATE` only.
     #[serde(default, deserialize_with = "null_default", skip_serializing_if = "Vec::is_empty")]
     pub members: Vec<Member>,
+    /// Active threads the bot can see, `GUILD_CREATE` only.
+    #[serde(default, deserialize_with = "null_default", skip_serializing_if = "Vec::is_empty")]
+    pub threads: Vec<Channel>,
 }
 
 impl Guild {
@@ -354,6 +357,7 @@ impl Guild {
             joined_at: None,
             channels: Vec::new(),
             members: Vec::new(),
+            threads: Vec::new(),
         }
     }
 
@@ -480,6 +484,12 @@ pub struct Member {
 }
 
 impl Member {
+    /// True while the member is in timeout, by the system clock.
+    #[doc(alias = "isCommunicationDisabled")]
+    pub fn is_timed_out(&self) -> bool {
+        self.communication_disabled_until.is_some_and(|until| until > Timestamp::now())
+    }
+
     /// The nickname, or else the display name of the user. `None` with neither, as on a member
     /// nested in a message.
     #[doc(alias = "displayName")]
@@ -603,4 +613,14 @@ fn key_present<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
 
 fn write_null<S: Serializer>(_: &bool, s: S) -> Result<S::Ok, S::Error> {
     s.serialize_none()
+}
+
+/// A ban.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GuildBan {
+    /// Why, if a reason was given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// The banned user.
+    pub user: User,
 }

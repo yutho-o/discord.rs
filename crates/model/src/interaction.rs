@@ -8,7 +8,7 @@
 //!
 //! The kind of `data` is decided by `type` next to it, so `data` stays raw until the whole object is
 //! read. Upstream's DM and guild wrappers collapse into `Option` fields, `[types 3.4]`. `entitlements`
-//! is left out with the monetization cut of the proof of concept, and thread metadata with threads.
+//! is left out until monetization is ported, and thread metadata until threads are.
 
 use crate::{
     ApplicationCommandType, ApplicationId, ApplicationIntegrationType, Attachment, AttachmentId, Channel, ChannelId,

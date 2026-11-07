@@ -87,7 +87,7 @@ async fn apply_and_fire(client: &Client, shard: u32, dispatch: Dispatch) {
                     if client.0.lifecycle.is_stopping() {
                         return;
                     }
-                    if let Some(ready) = client.0.ready.on_timeout() {
+                    if let Some(ready) = client.0.ready.on_timeout(shard) {
                         fire::<ClientReady>(&client, shard, client.bind_arc(ready)).await;
                     }
                 });
@@ -147,6 +147,63 @@ async fn apply_and_fire(client: &Client, shard: u32, dispatch: Dispatch) {
         }
         Dispatch::InteractionCreate(interaction) => {
             crate::interactions::router::route(client, shard, *interaction).await;
+        }
+        Dispatch::MessageDeleteBulk(event) => {
+            cache.apply_message_delete_bulk(shard, &event);
+            fire::<MessageDeleteBulk>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::MessageReactionAdd(event) => {
+            fire::<MessageReactionAdd>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::MessageReactionRemove(event) => {
+            fire::<MessageReactionRemove>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::GuildBanAdd(event) => {
+            fire::<GuildBanAdd>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::GuildBanRemove(event) => {
+            fire::<GuildBanRemove>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::GuildRoleCreate(event) => {
+            cache.apply_role_upsert(shard, &event);
+            fire::<GuildRoleCreate>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::GuildRoleUpdate(event) => {
+            cache.apply_role_upsert(shard, &event);
+            fire::<GuildRoleUpdate>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::GuildRoleDelete(event) => {
+            let cached = cache.apply_role_delete(shard, &event);
+            fire::<GuildRoleDelete>(client, shard, Deleted { event: client.bind(*event), cached }).await;
+        }
+        Dispatch::ThreadCreate(thread) => {
+            let thread = cache.apply_channel_create(shard, *thread);
+            fire::<ThreadCreate>(client, shard, client.bind_arc(thread)).await;
+        }
+        Dispatch::ThreadUpdate(thread) => {
+            let change = cache.apply_channel_update(shard, *thread);
+            fire::<ThreadUpdate>(client, shard, updated(client, change)).await;
+        }
+        Dispatch::ThreadDelete(event) => {
+            let cached = cache.apply_channel_delete(shard, event.to_channel());
+            fire::<ThreadDelete>(client, shard, Deleted { event: client.bind(*event), cached }).await;
+        }
+        Dispatch::ThreadListSync(event) => {
+            cache.apply_thread_list_sync(shard, &event);
+            fire::<ThreadListSync>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::ThreadMemberUpdate(event) => {
+            fire::<ThreadMemberUpdate>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::ThreadMembersUpdate(event) => {
+            fire::<ThreadMembersUpdate>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::WebhooksUpdate(event) => {
+            fire::<WebhooksUpdate>(client, shard, client.bind(*event)).await;
+        }
+        Dispatch::GuildMembersChunk(event) => {
+            let event = cache.apply_members_chunk(shard, *event);
+            fire::<GuildMembersChunk>(client, shard, client.bind(event)).await;
         }
         // `Resumed`, `Unknown` and any later arm are reached by `on_raw` only.
         _ => {}

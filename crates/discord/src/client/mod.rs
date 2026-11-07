@@ -11,14 +11,16 @@ pub use runner::Runner;
 pub use stats::ClientStats;
 
 use crate::Bound;
+use crate::Error;
 use crate::events::HandlerTable;
 use crate::pipeline::budget::Budget;
 use crate::pipeline::queue::ShardQueue;
 use crate::pipeline::ready::ReadyTracker;
 use crate::pipeline::shutdown::{self, Lifecycle};
 use dr_cache::Cache;
-use dr_gateway::{ShardsHandle, ShutdownMode};
+use dr_gateway::{GatewayCommand, ShardsHandle, ShutdownMode};
 use dr_model::ApplicationId;
+use dr_model::UpdatePresence;
 use dr_rest::Rest;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -37,6 +39,7 @@ pub(crate) struct ClientInner {
     pub(crate) options: ClientOptions,
     pub(crate) queue: OnceLock<Arc<ShardQueue>>,
     pub(crate) lifecycle: Lifecycle,
+    pub(crate) collectors: crate::collector::Collectors,
 }
 
 /// The client: REST, cache and gateway together. Not generic, and cheap to clone. Your state lives in
@@ -79,6 +82,39 @@ impl Client {
     /// The gateway round trip of a shard, `None` before the first ack or with no gateway running.
     pub fn shard_latency(&self, shard: u32) -> Option<Duration> {
         self.0.gateway.get().and_then(|g| g.latency(shard))
+    }
+
+    /// Sets the bot's status and activity. Use [`ClientBuilder::presence`] for the one sent at login.
+    /// A new session after a lost connection goes back to that one. Fails with [`Error::NotReady`]
+    /// before the client runs. It goes to every shard this process runs, and fails with the first
+    /// gateway error, after trying them all.
+    pub fn set_presence(&self, presence: UpdatePresence) -> Result<(), Error> {
+        let gateway = self.0.gateway.get().ok_or(Error::NotReady)?;
+        let mut first_error = None;
+        for shard in gateway.shard_ids() {
+            if let Err(e) = gateway.send(shard, GatewayCommand::UpdatePresence(presence.clone())) {
+                first_error.get_or_insert(e);
+            }
+        }
+        match first_error {
+            Some(e) => Err(e.into()),
+            None => Ok(()),
+        }
+    }
+
+    /// The total number of shards of the bot, once the client runs. `None` before.
+    pub fn shard_count(&self) -> Option<u32> {
+        self.0.gateway.get().map(|g| g.shard_count())
+    }
+
+    /// The ids of the shards this process runs, empty before the client runs.
+    pub fn shard_ids(&self) -> Vec<u32> {
+        self.0.gateway.get().map(|g| g.shard_ids()).unwrap_or_default()
+    }
+
+    /// The shard that receives the events of `guild`, once the client runs. `None` before.
+    pub fn shard_for(&self, guild: dr_model::GuildId) -> Option<u32> {
+        self.0.gateway.get().map(|g| g.shard_for(guild))
     }
 
     /// Binds a value to this client. Handles and tests use this.

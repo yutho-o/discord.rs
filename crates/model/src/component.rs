@@ -4,7 +4,7 @@
 //!
 //! Message components: a tree of `tagged_union!` with an unknown arm.
 //!
-//! Scope of the proof of concept: action rows, buttons, the five select menus and text input are
+//! Scope so far: action rows, buttons, the five select menus and text input are
 //! typed. Every other kind (Components V2, labels, file upload, radio and checkbox groups) goes
 //! through `Component::Unknown`, which re-serializes byte-exact, so those kinds survive a decode and
 //! an edit unchanged.

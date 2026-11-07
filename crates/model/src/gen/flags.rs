@@ -1,6 +1,6 @@
 //! Bit sets over `u64`, keeping unknown bits, `ARCHITECTURE.md` 7.6. Checked bit by bit against
 //! discord-api-types. A set used by one payload lives in that payload's file, such as
-//! `RoleFlags` in `payloads/guild.rs`. Sets that belong to a feature cut from the proof of concept do
+//! `RoleFlags` in `payloads/guild.rs`. Sets that belong to a feature not ported yet do
 //! not exist.
 //!
 //! A deprecated upstream name sits right after the current name of the same bit, so `Debug` prints

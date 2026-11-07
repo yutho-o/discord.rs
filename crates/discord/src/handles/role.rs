@@ -1,6 +1,7 @@
 //! `RoleHandle`.
 
-use crate::{Bound, Client};
+use crate::{Bound, Call, Client};
+use dr_builders::EditRole;
 use dr_model::{GuildId, Role, RoleId};
 
 /// A role by id: a client and two ids, no I/O to create.
@@ -20,6 +21,16 @@ impl RoleHandle {
     /// The id.
     pub fn id(&self) -> RoleId {
         self.id
+    }
+
+    /// Edits this role. Use `.reason(...)` for the audit log.
+    pub fn edit(&self, body: EditRole) -> Call<Bound<Role>> {
+        Call::new(self.client.clone(), self.client.rest().guilds().modify_role(self.guild, self.id, body))
+    }
+
+    /// Deletes this role. Use `.reason(...)` for the audit log.
+    pub fn delete(&self) -> Call<()> {
+        Call::new(self.client.clone(), self.client.rest().guilds().delete_role(self.guild, self.id))
     }
 
     /// The role from the cache. No I/O.

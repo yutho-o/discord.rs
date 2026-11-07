@@ -10,7 +10,7 @@ use std::time::Duration;
 pub struct GatewayInfo {
     /// The WebSocket URL.
     pub url: String,
-    /// The shard count Discord recommends. The proof of concept runs one whatever this says.
+    /// The shard count Discord recommends. The client runs one for now, whatever this says.
     pub recommended_shards: u32,
     /// Identifies left in the budget.
     pub remaining: u32,

@@ -46,6 +46,11 @@ impl<'a> GatewayScript<'a> {
         self.state.split.store(n.max(1), Ordering::SeqCst);
     }
 
+    /// Sends at most `n` members per `GUILD_MEMBERS_CHUNK`, instead of Discord's 1000.
+    pub fn member_chunk_size(self, n: u32) {
+        self.state.chunk_size.store(n.max(1), Ordering::SeqCst);
+    }
+
     /// Stops sending anything, ACKs included, while keeping the socket open.
     pub fn stall(self) {
         self.state.command(Command::Stall);

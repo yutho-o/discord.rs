@@ -32,10 +32,109 @@ impl RecordedRequest {
         self.headers.iter().find(|(n, _)| n == name).map(|(_, v)| v.as_str())
     }
 
-    /// The body as JSON, `Null` if it is not.
+    /// The body as JSON, `Null` if it is not. For `multipart/form-data`, the `payload_json` part, with
+    /// the `size` of each uploaded file added to its entry in `attachments`.
     pub fn json(&self) -> serde_json::Value {
-        serde_json::from_slice(&self.body).unwrap_or(serde_json::Value::Null)
+        let Some(parts) = self.parts() else {
+            return serde_json::from_slice(&self.body).unwrap_or(serde_json::Value::Null);
+        };
+        let payload = parts.iter().find(|p| p.name == "payload_json");
+        let mut json = payload.and_then(|p| serde_json::from_slice(&p.data).ok()).unwrap_or(serde_json::Value::Null);
+        if let Some(list) = json.get_mut("attachments").and_then(serde_json::Value::as_array_mut) {
+            for entry in list {
+                let Some(index) = entry.get("id").and_then(serde_json::Value::as_u64) else { continue };
+                let name = format!("files[{index}]");
+                if let Some(file) = parts.iter().find(|p| p.name == name) {
+                    entry["size"] = file.data.len().into();
+                    entry["content_type"] = file.content_type.clone().into();
+                }
+            }
+        }
+        json
     }
+
+    /// The parts of a `multipart/form-data` body, in order. `None` for any other body.
+    pub fn parts(&self) -> Option<Vec<FormPart>> {
+        let content_type = self.header("content-type")?;
+        let boundary = content_type.strip_prefix("multipart/form-data; boundary=")?;
+        Some(parse_multipart(&self.body, boundary))
+    }
+
+    /// The uploaded files: the parts named `files[i]`.
+    pub fn files(&self) -> Vec<FormPart> {
+        self.parts().unwrap_or_default().into_iter().filter(|p| p.name.starts_with("files[")).collect()
+    }
+}
+
+/// One part of a `multipart/form-data` body.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct FormPart {
+    /// The `name` of its `Content-Disposition`.
+    pub name: String,
+    /// Its `filename`, as sent, escapes included.
+    pub filename: Option<String>,
+    /// Its `Content-Type`.
+    pub content_type: Option<String>,
+    /// Its content.
+    pub data: Vec<u8>,
+}
+
+/// Splits a body on `--boundary`. Strict enough for tests: a malformed part is left out.
+fn parse_multipart(body: &[u8], boundary: &str) -> Vec<FormPart> {
+    let delimiter = format!("\r\n--{boundary}").into_bytes();
+    // The first delimiter has no new line in front of it.
+    let Some(mut rest) = body.strip_prefix(format!("--{boundary}").as_bytes()) else { return Vec::new() };
+    let mut parts = Vec::new();
+    while let Some(after) = rest.strip_prefix(b"\r\n") {
+        let Some(end) = after.windows(delimiter.len()).position(|w| w == delimiter.as_slice()) else { break };
+        let (part, next) = after.split_at(end);
+        rest = &next[delimiter.len()..];
+        if let Some(parsed) = parse_part(part) {
+            parts.push(parsed);
+        }
+    }
+    parts
+}
+
+fn parse_part(part: &[u8]) -> Option<FormPart> {
+    let split = part.windows(4).position(|w| w == b"\r\n\r\n")?;
+    let head = std::str::from_utf8(&part[..split]).ok()?;
+    let data = part[split + 4..].to_vec();
+    let (mut name, mut filename, mut content_type) = (None, None, None);
+    for line in head.split("\r\n") {
+        if let Some(value) = line.strip_prefix("Content-Disposition: form-data") {
+            for (key, v) in disposition_params(value) {
+                match key.as_str() {
+                    "name" => name = Some(v),
+                    "filename" => filename = Some(v),
+                    _ => {}
+                }
+            }
+        } else if let Some(v) = line.strip_prefix("Content-Type: ") {
+            content_type = Some(v.to_owned());
+        }
+    }
+    Some(FormPart { name: name?, filename, content_type, data })
+}
+
+/// The `; key="value"` pairs of a `Content-Disposition`. A `;` inside quotes does not split.
+fn disposition_params(text: &str) -> Vec<(String, String)> {
+    let mut params = Vec::new();
+    let mut rest = text;
+    while let Some(after) = rest.strip_prefix("; ") {
+        let Some((key, value)) = after.split_once('=') else { break };
+        let (value, next) = match value.strip_prefix('"') {
+            Some(quoted) => match quoted.split_once('"') {
+                Some((inner, next)) => (inner, next),
+                None => (quoted, ""),
+            },
+            None => value.split_at(value.find(';').unwrap_or(value.len())),
+        };
+        params.push((key.to_owned(), value.to_owned()));
+        rest = next;
+    }
+    params
 }
 
 /// What the REST half keeps, between the router and the scripts.

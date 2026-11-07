@@ -1,7 +1,7 @@
-//! Open enums, checked value by value against discord-api-types. Hand-written for the proof of concept, in
+//! Open enums, checked value by value against discord-api-types. Hand-written for now, in
 //! the layout the generator fills later. Lists follow the upstream order. An enum used by one payload
 //! lives in that payload's file, such as `GuildMFALevel` in `payloads/guild.rs`. Enums that belong to
-//! a feature cut from the proof of concept do not exist.
+//! a feature not ported yet do not exist.
 //!
 //! Derived from discord-api-types 00cbe03 (MIT, (c) 2020 vladfrangu).
 //! Changed: translated to `open_int!` and `open_str!`. Names follow `ARCHITECTURE.md` 7.1.

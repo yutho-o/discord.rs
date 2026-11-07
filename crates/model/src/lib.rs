@@ -1,4 +1,4 @@
-//! Discord API v10 wire types, hand-written for the proof of concept in the layout the generator
+//! Discord API v10 wire types, hand-written for now in the layout the generator
 //! will later fill. Every name is reachable from the crate root: `dr_model::Message`,
 //! `dr_model::rest::GetGatewayBotResult`, `dr_model::routes::channel(id)`.
 //!
@@ -15,7 +15,9 @@ pub mod ids;
 pub mod interaction;
 pub mod interaction_options;
 pub mod message_ext;
+pub mod permissions;
 pub mod rest_error;
+pub mod webhook;
 
 pub use channel::*;
 pub use component::*;
@@ -26,3 +28,4 @@ pub use ids::*;
 pub use interaction::*;
 pub use interaction_options::*;
 pub use rest_error::*;
+pub use webhook::*;

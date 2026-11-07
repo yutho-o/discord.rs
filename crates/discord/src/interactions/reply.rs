@@ -8,7 +8,7 @@ use crate::error::InteractionError;
 use crate::interactions::AutocompleteChoice;
 use crate::{Bound, Call, Client, Error};
 use dr_builders::{CreateMessage, EditMessage, ModalBuilder};
-use dr_core::Secret;
+use dr_core::{Secret, WithFiles};
 use dr_model::{ApplicationId, InteractionId, InteractionResponse, Message, MessageFlags};
 use futures::future::BoxFuture;
 use std::future::IntoFuture;
@@ -180,7 +180,8 @@ impl IntoFuture for ReplyRequest {
             let sent = match body {
                 ReplyBody::Message(m) => {
                     m.validate()?;
-                    api.callback(id, token, InteractionResponse::message(m)).await
+                    let files = m.uploads();
+                    api.callback(id, token, WithFiles::new(InteractionResponse::message(m), files)).await
                 }
                 ReplyBody::Defer { ephemeral } => {
                     let flags = ephemeral.then_some(MessageFlags::EPHEMERAL);
@@ -189,7 +190,8 @@ impl IntoFuture for ReplyRequest {
                 ReplyBody::DeferUpdate => api.callback(id, token, InteractionResponse::deferred_update()).await,
                 ReplyBody::Update(m) => {
                     m.validate()?;
-                    api.callback(id, token, InteractionResponse::update(m)).await
+                    let files = m.uploads();
+                    api.callback(id, token, WithFiles::new(InteractionResponse::update(m), files)).await
                 }
                 ReplyBody::Autocomplete(mut choices) => {
                     choices.truncate(MAX_CHOICES);

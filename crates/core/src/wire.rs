@@ -177,15 +177,55 @@ pub enum BodyError {
     Encode(#[from] serde_json::Error),
 }
 
+/// One file of a request. The REST client sends it as the part `files[index]` of a
+/// `multipart/form-data` body, where `index` is its place in [`RequestBody::files`].
+#[derive(Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FileUpload {
+    /// The file name Discord shows, and that `attachment://` URLs in embeds refer to.
+    pub name: String,
+    /// The media type. `None` sends `application/octet-stream`, and Discord guesses from the name.
+    pub content_type: Option<String>,
+    /// The content.
+    pub data: Bytes,
+}
+
+impl FileUpload {
+    /// A file named `name` holding `data`.
+    pub fn new(name: impl Into<String>, data: impl Into<Bytes>) -> Self {
+        Self { name: name.into(), content_type: None, data: data.into() }
+    }
+
+    /// Sets the media type, such as `image/png`.
+    pub fn content_type(mut self, value: impl Into<String>) -> Self {
+        self.content_type = Some(value.into());
+        self
+    }
+}
+
+/// Shows the name and the size, not the content.
+impl std::fmt::Debug for FileUpload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileUpload")
+            .field("name", &self.name)
+            .field("content_type", &self.content_type)
+            .field("len", &self.data.len())
+            .finish()
+    }
+}
+
 /// The encoded body of a request. An empty one sends no body.
 ///
-/// Marked `non_exhaustive`, since the later full port adds files. Build one with
-/// [`RequestBody::json`] or [`RequestBody::empty`].
+/// With files, the REST client sends `multipart/form-data`: the JSON as `payload_json`, then each
+/// file. Build one with [`RequestBody::json`] or [`RequestBody::empty`], then
+/// [`RequestBody::with_files`].
 #[derive(Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct RequestBody {
     /// JSON text, if any.
     pub json: Option<Bytes>,
+    /// Files, sent in this order.
+    pub files: Vec<FileUpload>,
 }
 
 impl RequestBody {
@@ -196,7 +236,13 @@ impl RequestBody {
 
     /// Encodes `v` as JSON.
     pub fn json<T: Serialize + ?Sized>(v: &T) -> Result<Self, BodyError> {
-        Ok(Self { json: Some(Bytes::from(serde_json::to_vec(v)?)) })
+        Ok(Self { json: Some(Bytes::from(serde_json::to_vec(v)?)), files: Vec::new() })
+    }
+
+    /// Adds files after those already there.
+    pub fn with_files(mut self, files: impl IntoIterator<Item = FileUpload>) -> Self {
+        self.files.extend(files);
+        self
     }
 }
 
@@ -205,6 +251,27 @@ impl RequestBody {
 pub trait IntoBody {
     /// Validates and encodes the value.
     fn into_body(self) -> Result<RequestBody, BodyError>;
+}
+
+/// A body with files added after it is encoded. An interaction callback uses it: the message inside
+/// knows its files, and the wrapper around it does not.
+#[derive(Debug)]
+pub struct WithFiles<B> {
+    body: B,
+    files: Vec<FileUpload>,
+}
+
+impl<B: IntoBody> WithFiles<B> {
+    /// `body`, then `files`.
+    pub fn new(body: B, files: Vec<FileUpload>) -> Self {
+        Self { body, files }
+    }
+}
+
+impl<B: IntoBody> IntoBody for WithFiles<B> {
+    fn into_body(self) -> Result<RequestBody, BodyError> {
+        Ok(self.body.into_body()?.with_files(self.files))
+    }
 }
 
 impl IntoBody for RequestBody {

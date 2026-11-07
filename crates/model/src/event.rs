@@ -1,15 +1,15 @@
 //! Gateway envelope and the `Dispatch` table, `ARCHITECTURE.md` 8.2.
 //!
 //! Event bodies follow discord-api-types `gateway/v10.ts` (MIT, (c) 2020 vladfrangu), under the
-//! patterns of `ARCHITECTURE.md` 7.4. The proof of concept types 15 of the 79 upstream events. Every
+//! patterns of `ARCHITECTURE.md` 7.4. Only some of the 79 upstream events are typed so far. Every
 //! other event reaches [`Dispatch::Unknown`] with its name and raw JSON, and is not lost.
 
 use crate::{
     ApplicationFlags, ApplicationId, Attachment, AvatarDecorationData, Channel, ChannelId, ChannelMention, ChannelType,
-    Collectibles, Component, Embed, Guild, GuildId, GuildMemberFlags, Interaction, Member, Message, MessageActivity,
-    MessageCall, MessageFlags, MessageId, MessageInteraction, MessageInteractionMetadata, MessageReference,
-    MessageSharedClientTheme, MessageSnapshot, MessageType, Nonce, Reaction, ResolvedData, RoleId, UnavailableGuild,
-    User, WebhookId,
+    Collectibles, Component, Embed, Emoji, Guild, GuildId, GuildMemberFlags, Interaction, Member, Message,
+    MessageActivity, MessageCall, MessageFlags, MessageId, MessageInteraction, MessageInteractionMetadata,
+    MessageReference, MessageSharedClientTheme, MessageSnapshot, MessageType, Nonce, Reaction, ResolvedData, Role,
+    RoleId, ThreadMember, UnavailableGuild, User, UserId, WebhookId,
 };
 use dr_core::{DecodeError, Patch, Secret, Timestamp, decode, null_default};
 use serde::de::{Deserializer, Error as DeError, Visitor};
@@ -86,7 +86,7 @@ pub struct Hello {
 /// Which event a frame holds, known before its body is decoded. Indexes the `needs_decode` table.
 ///
 /// `TypingStart` and `PresenceUpdate` exist so that the queue can shed them under load. Their body
-/// is not typed in the proof of concept, so they decode to [`Dispatch::Unknown`].
+/// is not typed yet, so they decode to [`Dispatch::Unknown`].
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[non_exhaustive]
 #[allow(missing_docs)] // each variant is the PascalCase of the event name
@@ -108,13 +108,29 @@ pub enum DispatchKind {
     InteractionCreate,
     TypingStart,
     PresenceUpdate,
+    MessageDeleteBulk,
+    MessageReactionAdd,
+    MessageReactionRemove,
+    GuildBanAdd,
+    GuildBanRemove,
+    GuildRoleCreate,
+    GuildRoleUpdate,
+    GuildRoleDelete,
+    ThreadCreate,
+    ThreadUpdate,
+    ThreadDelete,
+    ThreadListSync,
+    ThreadMemberUpdate,
+    ThreadMembersUpdate,
+    WebhooksUpdate,
+    GuildMembersChunk,
     /// Any event name this build does not know.
     Unknown,
 }
 
 impl DispatchKind {
     /// Number of kinds, the size of a table indexed by [`DispatchKind::index`].
-    pub const COUNT: usize = 18;
+    pub const COUNT: usize = 34;
 
     /// Every kind, in [`DispatchKind::index`] order.
     pub const ALL: [Self; Self::COUNT] = [
@@ -135,6 +151,22 @@ impl DispatchKind {
         Self::InteractionCreate,
         Self::TypingStart,
         Self::PresenceUpdate,
+        Self::MessageDeleteBulk,
+        Self::MessageReactionAdd,
+        Self::MessageReactionRemove,
+        Self::GuildBanAdd,
+        Self::GuildBanRemove,
+        Self::GuildRoleCreate,
+        Self::GuildRoleUpdate,
+        Self::GuildRoleDelete,
+        Self::ThreadCreate,
+        Self::ThreadUpdate,
+        Self::ThreadDelete,
+        Self::ThreadListSync,
+        Self::ThreadMemberUpdate,
+        Self::ThreadMembersUpdate,
+        Self::WebhooksUpdate,
+        Self::GuildMembersChunk,
         Self::Unknown,
     ];
 
@@ -158,6 +190,22 @@ impl DispatchKind {
             "INTERACTION_CREATE" => Self::InteractionCreate,
             "TYPING_START" => Self::TypingStart,
             "PRESENCE_UPDATE" => Self::PresenceUpdate,
+            "MESSAGE_DELETE_BULK" => Self::MessageDeleteBulk,
+            "MESSAGE_REACTION_ADD" => Self::MessageReactionAdd,
+            "MESSAGE_REACTION_REMOVE" => Self::MessageReactionRemove,
+            "GUILD_BAN_ADD" => Self::GuildBanAdd,
+            "GUILD_BAN_REMOVE" => Self::GuildBanRemove,
+            "GUILD_ROLE_CREATE" => Self::GuildRoleCreate,
+            "GUILD_ROLE_UPDATE" => Self::GuildRoleUpdate,
+            "GUILD_ROLE_DELETE" => Self::GuildRoleDelete,
+            "THREAD_CREATE" => Self::ThreadCreate,
+            "THREAD_UPDATE" => Self::ThreadUpdate,
+            "THREAD_DELETE" => Self::ThreadDelete,
+            "THREAD_LIST_SYNC" => Self::ThreadListSync,
+            "THREAD_MEMBER_UPDATE" => Self::ThreadMemberUpdate,
+            "THREAD_MEMBERS_UPDATE" => Self::ThreadMembersUpdate,
+            "WEBHOOKS_UPDATE" => Self::WebhooksUpdate,
+            "GUILD_MEMBERS_CHUNK" => Self::GuildMembersChunk,
             _ => Self::Unknown,
         }
     }
@@ -182,6 +230,22 @@ impl DispatchKind {
             Self::InteractionCreate => "INTERACTION_CREATE",
             Self::TypingStart => "TYPING_START",
             Self::PresenceUpdate => "PRESENCE_UPDATE",
+            Self::MessageDeleteBulk => "MESSAGE_DELETE_BULK",
+            Self::MessageReactionAdd => "MESSAGE_REACTION_ADD",
+            Self::MessageReactionRemove => "MESSAGE_REACTION_REMOVE",
+            Self::GuildBanAdd => "GUILD_BAN_ADD",
+            Self::GuildBanRemove => "GUILD_BAN_REMOVE",
+            Self::GuildRoleCreate => "GUILD_ROLE_CREATE",
+            Self::GuildRoleUpdate => "GUILD_ROLE_UPDATE",
+            Self::GuildRoleDelete => "GUILD_ROLE_DELETE",
+            Self::ThreadCreate => "THREAD_CREATE",
+            Self::ThreadUpdate => "THREAD_UPDATE",
+            Self::ThreadDelete => "THREAD_DELETE",
+            Self::ThreadListSync => "THREAD_LIST_SYNC",
+            Self::ThreadMemberUpdate => "THREAD_MEMBER_UPDATE",
+            Self::ThreadMembersUpdate => "THREAD_MEMBERS_UPDATE",
+            Self::WebhooksUpdate => "WEBHOOKS_UPDATE",
+            Self::GuildMembersChunk => "GUILD_MEMBERS_CHUNK",
             Self::Unknown => return None,
         })
     }
@@ -220,6 +284,22 @@ pub enum Dispatch {
     MessageUpdate(Box<MessageUpdateEvent>),
     MessageDelete(Box<MessageDeleteEvent>),
     InteractionCreate(Box<Interaction>),
+    MessageDeleteBulk(Box<MessageDeleteBulkEvent>),
+    MessageReactionAdd(Box<MessageReactionAddEvent>),
+    MessageReactionRemove(Box<MessageReactionRemoveEvent>),
+    GuildBanAdd(Box<GuildBanEvent>),
+    GuildBanRemove(Box<GuildBanEvent>),
+    GuildRoleCreate(Box<GuildRoleEvent>),
+    GuildRoleUpdate(Box<GuildRoleEvent>),
+    GuildRoleDelete(Box<GuildRoleDeleteEvent>),
+    ThreadCreate(Box<Channel>),
+    ThreadUpdate(Box<Channel>),
+    ThreadDelete(Box<ThreadDeleteEvent>),
+    ThreadListSync(Box<ThreadListSyncEvent>),
+    ThreadMemberUpdate(Box<ThreadMemberUpdateEvent>),
+    ThreadMembersUpdate(Box<ThreadMembersUpdateEvent>),
+    WebhooksUpdate(Box<WebhooksUpdateEvent>),
+    GuildMembersChunk(Box<GuildMembersChunkEvent>),
     /// An event with no typed arm. Keeps its name and raw JSON.
     Unknown {
         /// Event name.
@@ -252,6 +332,22 @@ impl Dispatch {
             DispatchKind::MessageUpdate => Self::MessageUpdate(decode(d)?),
             DispatchKind::MessageDelete => Self::MessageDelete(decode(d)?),
             DispatchKind::InteractionCreate => Self::InteractionCreate(decode(d)?),
+            DispatchKind::MessageDeleteBulk => Self::MessageDeleteBulk(decode(d)?),
+            DispatchKind::MessageReactionAdd => Self::MessageReactionAdd(decode(d)?),
+            DispatchKind::MessageReactionRemove => Self::MessageReactionRemove(decode(d)?),
+            DispatchKind::GuildBanAdd => Self::GuildBanAdd(decode(d)?),
+            DispatchKind::GuildBanRemove => Self::GuildBanRemove(decode(d)?),
+            DispatchKind::GuildRoleCreate => Self::GuildRoleCreate(decode(d)?),
+            DispatchKind::GuildRoleUpdate => Self::GuildRoleUpdate(decode(d)?),
+            DispatchKind::GuildRoleDelete => Self::GuildRoleDelete(decode(d)?),
+            DispatchKind::ThreadCreate => Self::ThreadCreate(decode(d)?),
+            DispatchKind::ThreadUpdate => Self::ThreadUpdate(decode(d)?),
+            DispatchKind::ThreadDelete => Self::ThreadDelete(decode(d)?),
+            DispatchKind::ThreadListSync => Self::ThreadListSync(decode(d)?),
+            DispatchKind::ThreadMemberUpdate => Self::ThreadMemberUpdate(decode(d)?),
+            DispatchKind::ThreadMembersUpdate => Self::ThreadMembersUpdate(decode(d)?),
+            DispatchKind::WebhooksUpdate => Self::WebhooksUpdate(decode(d)?),
+            DispatchKind::GuildMembersChunk => Self::GuildMembersChunk(decode(d)?),
             DispatchKind::TypingStart | DispatchKind::PresenceUpdate | DispatchKind::Unknown => {
                 let raw = if d.is_empty() { RawValue::NULL.to_owned() } else { decode(d)? };
                 Self::Unknown { t: t.to_owned(), raw }
@@ -278,6 +374,22 @@ impl Dispatch {
             Self::MessageUpdate(_) => DispatchKind::MessageUpdate,
             Self::MessageDelete(_) => DispatchKind::MessageDelete,
             Self::InteractionCreate(_) => DispatchKind::InteractionCreate,
+            Self::MessageDeleteBulk(_) => DispatchKind::MessageDeleteBulk,
+            Self::MessageReactionAdd(_) => DispatchKind::MessageReactionAdd,
+            Self::MessageReactionRemove(_) => DispatchKind::MessageReactionRemove,
+            Self::GuildBanAdd(_) => DispatchKind::GuildBanAdd,
+            Self::GuildBanRemove(_) => DispatchKind::GuildBanRemove,
+            Self::GuildRoleCreate(_) => DispatchKind::GuildRoleCreate,
+            Self::GuildRoleUpdate(_) => DispatchKind::GuildRoleUpdate,
+            Self::GuildRoleDelete(_) => DispatchKind::GuildRoleDelete,
+            Self::ThreadCreate(_) => DispatchKind::ThreadCreate,
+            Self::ThreadUpdate(_) => DispatchKind::ThreadUpdate,
+            Self::ThreadDelete(_) => DispatchKind::ThreadDelete,
+            Self::ThreadListSync(_) => DispatchKind::ThreadListSync,
+            Self::ThreadMemberUpdate(_) => DispatchKind::ThreadMemberUpdate,
+            Self::ThreadMembersUpdate(_) => DispatchKind::ThreadMembersUpdate,
+            Self::WebhooksUpdate(_) => DispatchKind::WebhooksUpdate,
+            Self::GuildMembersChunk(_) => DispatchKind::GuildMembersChunk,
             Self::Unknown { t, .. } => DispatchKind::from_t(t),
         }
     }
@@ -317,6 +429,22 @@ impl fmt::Debug for Dispatch {
             Self::MessageUpdate(v) => arm(f, "MessageUpdate", v),
             Self::MessageDelete(v) => arm(f, "MessageDelete", v),
             Self::InteractionCreate(v) => arm(f, "InteractionCreate", v),
+            Self::MessageDeleteBulk(v) => arm(f, "MessageDeleteBulk", v),
+            Self::MessageReactionAdd(v) => arm(f, "MessageReactionAdd", v),
+            Self::MessageReactionRemove(v) => arm(f, "MessageReactionRemove", v),
+            Self::GuildBanAdd(v) => arm(f, "GuildBanAdd", v),
+            Self::GuildBanRemove(v) => arm(f, "GuildBanRemove", v),
+            Self::GuildRoleCreate(v) => arm(f, "GuildRoleCreate", v),
+            Self::GuildRoleUpdate(v) => arm(f, "GuildRoleUpdate", v),
+            Self::GuildRoleDelete(v) => arm(f, "GuildRoleDelete", v),
+            Self::ThreadCreate(v) => arm(f, "ThreadCreate", v),
+            Self::ThreadUpdate(v) => arm(f, "ThreadUpdate", v),
+            Self::ThreadDelete(v) => arm(f, "ThreadDelete", v),
+            Self::ThreadListSync(v) => arm(f, "ThreadListSync", v),
+            Self::ThreadMemberUpdate(v) => arm(f, "ThreadMemberUpdate", v),
+            Self::ThreadMembersUpdate(v) => arm(f, "ThreadMembersUpdate", v),
+            Self::WebhooksUpdate(v) => arm(f, "WebhooksUpdate", v),
+            Self::GuildMembersChunk(v) => arm(f, "GuildMembersChunk", v),
             Self::Unknown { t, raw } => {
                 f.debug_struct("Unknown").field("t", t).field("raw_len", &raw.get().len()).finish()
             }
@@ -473,6 +601,89 @@ pub struct MessageUpdateEvent {
     pub resolved: Option<Box<ResolvedData>>,
 }
 
+/// Body of `MESSAGE_DELETE_BULK`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MessageDeleteBulkEvent {
+    /// The deleted messages.
+    pub ids: Vec<MessageId>,
+    /// Channel id.
+    pub channel_id: ChannelId,
+    /// Guild id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild_id: Option<GuildId>,
+}
+
+/// Body of `MESSAGE_REACTION_ADD`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MessageReactionAddEvent {
+    /// Who reacted.
+    pub user_id: UserId,
+    /// Channel id.
+    pub channel_id: ChannelId,
+    /// The message reacted to.
+    pub message_id: MessageId,
+    /// Guild id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild_id: Option<GuildId>,
+    /// The member who reacted, in a guild.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member: Option<Member>,
+    /// The emoji.
+    pub emoji: Emoji,
+    /// Who wrote the message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_author_id: Option<UserId>,
+    /// Whether it is a super reaction.
+    #[serde(default)]
+    pub burst: bool,
+}
+
+/// Body of `MESSAGE_REACTION_REMOVE`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MessageReactionRemoveEvent {
+    /// Who removed their reaction.
+    pub user_id: UserId,
+    /// Channel id.
+    pub channel_id: ChannelId,
+    /// The message reacted to.
+    pub message_id: MessageId,
+    /// Guild id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild_id: Option<GuildId>,
+    /// The emoji.
+    pub emoji: Emoji,
+    /// Whether it was a super reaction.
+    #[serde(default)]
+    pub burst: bool,
+}
+
+/// Body of `GUILD_BAN_ADD` and `GUILD_BAN_REMOVE`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GuildBanEvent {
+    /// Guild id.
+    pub guild_id: GuildId,
+    /// The user.
+    pub user: User,
+}
+
+/// Body of `GUILD_ROLE_CREATE` and `GUILD_ROLE_UPDATE`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GuildRoleEvent {
+    /// Guild id.
+    pub guild_id: GuildId,
+    /// The role.
+    pub role: Role,
+}
+
+/// Body of `GUILD_ROLE_DELETE`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GuildRoleDeleteEvent {
+    /// Guild id.
+    pub guild_id: GuildId,
+    /// The deleted role.
+    pub role_id: RoleId,
+}
+
 /// Body of `MESSAGE_DELETE`.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MessageDeleteEvent {
@@ -544,4 +755,119 @@ pub struct GuildMemberRemoveEvent {
     pub guild_id: GuildId,
     /// The user.
     pub user: User,
+}
+
+/// Body of `THREAD_DELETE`: what is left of the thread.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ThreadDeleteEvent {
+    /// Thread id.
+    pub id: ChannelId,
+    /// Guild id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild_id: Option<GuildId>,
+    /// The channel the thread was in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<ChannelId>,
+    /// The thread's type.
+    #[serde(rename = "type")]
+    pub kind: ChannelType,
+}
+
+impl ThreadDeleteEvent {
+    /// The deleted thread as a partial channel.
+    pub fn to_channel(&self) -> Channel {
+        let mut channel = Channel::partial(self.id, self.kind);
+        channel.guild_id = self.guild_id;
+        channel.parent_id = self.parent_id;
+        channel
+    }
+}
+
+/// Body of `THREAD_LIST_SYNC`: the active threads of a guild, sent when the bot gains access to a
+/// channel.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ThreadListSyncEvent {
+    /// Guild id.
+    pub guild_id: GuildId,
+    /// The parent channels synced. Absent means the whole guild: threads of other channels that the
+    /// cache holds are gone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_ids: Option<Vec<ChannelId>>,
+    /// Every active thread of those channels.
+    #[serde(default, deserialize_with = "null_default")]
+    pub threads: Vec<Channel>,
+    /// The bot's membership of those threads.
+    #[serde(default, deserialize_with = "null_default")]
+    pub members: Vec<ThreadMember>,
+}
+
+/// Body of `THREAD_MEMBER_UPDATE`: the bot's membership of a thread changed.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ThreadMemberUpdateEvent {
+    /// Guild id.
+    pub guild_id: GuildId,
+    /// The membership.
+    #[serde(flatten)]
+    pub member: ThreadMember,
+}
+
+/// Body of `THREAD_MEMBERS_UPDATE`: people joined or left a thread. Members other than the bot need
+/// the `GUILD_MEMBERS` intent.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ThreadMembersUpdateEvent {
+    /// Thread id.
+    pub id: ChannelId,
+    /// Guild id.
+    pub guild_id: GuildId,
+    /// Approximate count, which stops at 50.
+    #[serde(default)]
+    pub member_count: i64,
+    /// Who joined.
+    #[serde(default, deserialize_with = "null_default")]
+    pub added_members: Vec<ThreadMember>,
+    /// Who left.
+    #[serde(default, deserialize_with = "null_default")]
+    pub removed_member_ids: Vec<UserId>,
+}
+
+/// Body of `WEBHOOKS_UPDATE`: a webhook of a channel was created, edited or deleted. It does not say
+/// which: fetch the channel's webhooks to know.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct WebhooksUpdateEvent {
+    /// Guild id.
+    pub guild_id: GuildId,
+    /// Channel id.
+    pub channel_id: ChannelId,
+}
+
+/// Body of `GUILD_MEMBERS_CHUNK`: one part of the answer to a request for guild members (op 8).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GuildMembersChunkEvent {
+    /// Guild id.
+    pub guild_id: GuildId,
+    /// The members of this chunk.
+    #[serde(default, deserialize_with = "null_default")]
+    pub members: Vec<Member>,
+    /// This chunk's index, from 0.
+    #[serde(default)]
+    pub chunk_index: u32,
+    /// How many chunks answer the request.
+    #[serde(default)]
+    pub chunk_count: u32,
+    /// The requested user ids that are not members.
+    #[serde(default, deserialize_with = "null_default")]
+    pub not_found: Vec<UserId>,
+    /// Their presences, when asked for. Kept as raw JSON: presences are not modeled yet.
+    #[serde(default, deserialize_with = "null_default", skip_serializing_if = "Vec::is_empty")]
+    pub presences: Vec<serde_json::Value>,
+    /// The nonce of the request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
+}
+
+impl GuildMembersChunkEvent {
+    /// Whether this is the last chunk of its request.
+    pub fn is_last(&self) -> bool {
+        self.chunk_index.saturating_add(1) >= self.chunk_count
+    }
 }

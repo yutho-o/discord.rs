@@ -15,8 +15,8 @@ pub use patch::Patch;
 pub use secret::Secret;
 pub use time::Timestamp;
 pub use wire::{
-    BodyError, BoxError, DecodeError, IntoBody, Lenient, RequestBody, ValidationError, decode, lenient_i64,
-    null_default,
+    BodyError, BoxError, DecodeError, FileUpload, IntoBody, Lenient, RequestBody, ValidationError, WithFiles, decode,
+    lenient_i64, null_default,
 };
 
 #[doc(hidden)]

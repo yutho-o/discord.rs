@@ -5,6 +5,7 @@
 //! and no closure runs under a lock. See `ARCHITECTURE.md` 10.3.
 
 pub mod apply;
+pub mod permissions;
 pub mod policy;
 pub mod sharded;
 pub mod store;

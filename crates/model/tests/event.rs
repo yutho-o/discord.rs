@@ -382,6 +382,22 @@ fn every_typed_arm_decodes_and_reports_its_kind() {
         (DispatchKind::MessageUpdate, r#"{"id":"600","channel_id":"500"}"#.to_owned()),
         (DispatchKind::MessageDelete, r#"{"id":"600","channel_id":"500"}"#.to_owned()),
         (DispatchKind::InteractionCreate, interaction().to_owned()),
+        (DispatchKind::MessageDeleteBulk, r#"{"ids":["600"],"channel_id":"500"}"#.to_owned()),
+        (DispatchKind::MessageReactionAdd, r#"{"user_id":"1","channel_id":"500","message_id":"600","emoji":{"id":null,"name":"x"},"burst":false,"type":0}"#.to_owned()),
+        (DispatchKind::MessageReactionRemove, r#"{"user_id":"1","channel_id":"500","message_id":"600","emoji":{"id":null,"name":"x"},"burst":false,"type":0}"#.to_owned()),
+        (DispatchKind::GuildBanAdd, format!(r#"{{"guild_id":"200","user":{USER}}}"#)),
+        (DispatchKind::GuildBanRemove, format!(r#"{{"guild_id":"200","user":{USER}}}"#)),
+        (DispatchKind::GuildRoleCreate, r#"{"guild_id":"200","role":{"id":"7","name":"r","permissions":"0"}}"#.to_owned()),
+        (DispatchKind::GuildRoleUpdate, r#"{"guild_id":"200","role":{"id":"7","name":"r","permissions":"0"}}"#.to_owned()),
+        (DispatchKind::GuildRoleDelete, r#"{"guild_id":"200","role_id":"7"}"#.to_owned()),
+        (DispatchKind::ThreadCreate, r#"{"id":"8","type":11,"guild_id":"200","parent_id":"500","newly_created":true}"#.to_owned()),
+        (DispatchKind::ThreadUpdate, r#"{"id":"8","type":11,"guild_id":"200","parent_id":"500"}"#.to_owned()),
+        (DispatchKind::ThreadDelete, r#"{"id":"8","type":11,"guild_id":"200","parent_id":"500"}"#.to_owned()),
+        (DispatchKind::ThreadListSync, r#"{"guild_id":"200","threads":[{"id":"8","type":11}],"members":[{"id":"8","user_id":"1","join_timestamp":"2020-01-01T00:00:00+00:00","flags":0}]}"#.to_owned()),
+        (DispatchKind::ThreadMemberUpdate, r#"{"guild_id":"200","id":"8","user_id":"1","join_timestamp":"2020-01-01T00:00:00+00:00","flags":1}"#.to_owned()),
+        (DispatchKind::ThreadMembersUpdate, r#"{"id":"8","guild_id":"200","member_count":2,"removed_member_ids":["1"]}"#.to_owned()),
+        (DispatchKind::WebhooksUpdate, r#"{"guild_id":"200","channel_id":"500"}"#.to_owned()),
+        (DispatchKind::GuildMembersChunk, r#"{"guild_id":"200","members":[],"chunk_index":0,"chunk_count":1,"not_found":["9"],"nonce":"n"}"#.to_owned()),
     ];
     assert_eq!(table.len(), DispatchKind::COUNT - 3, "all but typing, presence and unknown");
     for (kind, body) in table {

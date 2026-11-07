@@ -1,5 +1,5 @@
 #!/bin/sh
-# The PoC gate (docs/design/POC.md). Stops at the first failure. Run from anywhere.
+# The gate. Stops at the first failure. Run from anywhere.
 set -eu
 cd "$(dirname "$0")/.."
 

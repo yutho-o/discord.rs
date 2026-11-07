@@ -272,3 +272,68 @@ async fn cancel_at_every_await() {
         .ok();
     assert_eq!(rest_c.limiter().queued(), 0);
 }
+
+fn patch_channel(rest: &Rest, body: Value) -> dr_rest::Request<Value> {
+    let body = dr_core::RequestBody::json(&body);
+    dr_rest::Request::new(rest.clone(), Method::Patch, "/channels/339942739275677727".to_owned(), body)
+}
+
+/// A 429 while the bucket still has room: a sublimit, such as two renames per 10 minutes.
+const SUBLIMIT: [(&str, &str); 5] = [
+    ("retry-after", "0.4"),
+    ("x-ratelimit-bucket", "ch"),
+    ("x-ratelimit-limit", "10"),
+    ("x-ratelimit-remaining", "9"),
+    ("x-ratelimit-reset-after", "0.1"),
+];
+
+#[tokio::test]
+async fn a_sublimit_holds_only_the_requests_under_it() {
+    let script = Script::new([Step::Response(429, SUBLIMIT.to_vec(), RATE_LIMITED)]);
+    let rest = rest(&script);
+    let start = Instant::now();
+    let rename = std::future::IntoFuture::into_future(patch_channel(&rest, json!({"name": "a"})));
+    let (renamed, (other, other_took), (second, second_took)) = tokio::join!(
+        rename,
+        async {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            let at = Instant::now();
+            (patch_channel(&rest, json!({"nsfw": true})).await, at.elapsed())
+        },
+        async {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            let at = Instant::now();
+            (patch_channel(&rest, json!({"topic": "b"})).await, at.elapsed())
+        },
+    );
+    renamed.unwrap();
+    other.unwrap();
+    second.unwrap();
+    assert!(start.elapsed() >= Duration::from_millis(350), "the renamer waited: {:?}", start.elapsed());
+    assert!(other_took < Duration::from_millis(250), "the bucket was not blocked: {other_took:?}");
+    assert!(second_took >= Duration::from_millis(250), "another rename waited: {second_took:?}");
+}
+
+#[tokio::test]
+async fn a_rejecting_request_under_a_sublimit_fails_without_sending() {
+    let script = Script::new([Step::Response(429, SUBLIMIT.to_vec(), RATE_LIMITED)]);
+    let rest = rest(&script);
+    let first = patch_channel(&rest, json!({"name": "a"})).reject_on_rate_limit(true).await;
+    assert!(matches!(first, Err(RestError::RateLimited(_))), "{first:?}");
+    let second = patch_channel(&rest, json!({"name": "b"})).reject_on_rate_limit(true).await;
+    assert!(matches!(second, Err(RestError::RateLimited(_))), "{second:?}");
+    assert_eq!(script.sends(), 1, "the second was refused locally");
+    patch_channel(&rest, json!({"position": 2})).reject_on_rate_limit(true).await.unwrap();
+}
+
+#[test]
+fn which_requests_fall_under_a_sublimit() {
+    use dr_rest::limit::has_sublimit;
+    let route = |verb: Method, path: &str| dr_rest::route::route_info(verb, path);
+    let channel = route(Method::Patch, "/channels/339942739275677727");
+    assert!(has_sublimit(&channel, Some(br#"{"name":"x"}"#)));
+    assert!(has_sublimit(&channel, Some(br#"{"topic":null}"#)));
+    assert!(!has_sublimit(&channel, Some(br#"{"nsfw":true}"#)));
+    assert!(!has_sublimit(&channel, None));
+    assert!(has_sublimit(&route(Method::Post, "/guilds/222078108977594368/emojis"), None), "elsewhere, every request");
+}

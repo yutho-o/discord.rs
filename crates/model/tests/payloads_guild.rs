@@ -690,12 +690,21 @@ fn guild_lists_sent_as_null_read_as_empty() {
 #[test]
 fn guild_ignores_keys_of_cut_features_and_new_keys() {
     let g: Guild = decode(
-        r#"{"id":"5","stickers":[{"id":"1"}],"threads":[{"id":"2"}],"presences":[{"user":{"id":"3"}}],
+        r#"{"id":"5","stickers":[{"id":"1"}],"presences":[{"user":{"id":"3"}}],
             "voice_states":[{}],"stage_instances":[{}],"guild_scheduled_events":[{}],
             "soundboard_sounds":[{}],"home_header":null,"a_new_key":{"x":1}}"#,
     )
     .unwrap();
     assert_eq!(g.id, GuildId::new(5));
+}
+
+#[test]
+fn guild_create_threads_are_read() {
+    let g: Guild = decode(r#"{"id":"5","threads":[{"id":"2","type":11,"parent_id":"3"}]}"#).unwrap();
+    assert_eq!(g.threads.len(), 1);
+    assert!(g.threads[0].is_thread());
+    let none: Guild = decode(r#"{"id":"5","threads":null}"#).unwrap();
+    assert!(none.threads.is_empty());
 }
 
 #[test]

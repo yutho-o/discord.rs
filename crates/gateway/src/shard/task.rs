@@ -444,7 +444,10 @@ async fn connection(
                         ctx.shared.set_status(ShardStatus::Identifying);
                         phase_deadline = None;
                         let earliest = last_identify.map_or_else(Instant::now, |at| at + IDENTIFY_GAP);
-                        identify_at = Some(earliest);
+                        identify_at = Some(match &options.identify_limiter {
+                            Some(limiter) => limiter.reserve(shard, earliest),
+                            None => earliest,
+                        });
                     }
                 } else if op == Opcode::HEARTBEAT_ACK
                     && let Some(hb) = heartbeat.as_mut() {

@@ -6,8 +6,8 @@ in Rust. The package is `discord-rust`, the library is `discord`, so a bot write
 This is an unofficial project. It is not affiliated with or endorsed by Discord Inc. or the discord.js
 project.
 
-**Status: proof of concept.** It passes its tests against a local mock, and has never run against real
-Discord. `docs/POC_STATUS.md` says what works, what is cut and what is unverified.
+**Status: alpha.** A real bot runs on it, and much of discord.js is not ported yet, so expect the API to
+change. `docs/STATUS.md` says what works, what is missing and what is unverified.
 
 ## Try it
 
@@ -17,10 +17,11 @@ Message Content intent, invite it to a test server, then:
 ```sh
 export DISCORD_TOKEN=...
 export DISCORD_GUILD_ID=...
-cargo run -p discord-rust --example poc_bot
+cargo run -p discord-rust --example basic_bot
 ```
 
-`docs/POC_STATUS.md` has the detailed steps and what to check. A bot looks like this:
+`docs/STATUS.md` has the detailed steps and what to check, and `examples/moderation_bot.rs` shows bans,
+timeouts, roles and permission checks. A bot looks like this:
 
 ```rust,no_run
 use discord::prelude::*;

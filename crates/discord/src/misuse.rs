@@ -1,7 +1,7 @@
 //! The misuse catalogue of `ARCHITECTURE.md` 9.5, as `compile_fail` doctests: each of these must fail
 //! to compile. `#[cfg(doctest)]` only, so it is not part of the API.
 //!
-//! These replace the upstream plan of `trybuild` for the proof of concept, whose `.stderr` files are
+//! These stand in for the upstream plan of `trybuild`, whose `.stderr` files are
 //! brittle and need their own target. Stable does not check the error codes below. To check them,
 //! run `RUSTC_BOOTSTRAP=1 cargo test --doc -p discord-rust`.
 

@@ -4,7 +4,10 @@ use super::GatewayEvent;
 use crate::interactions::Interaction;
 use crate::{Bound, Deleted, Updated};
 use dr_model::{
-    Channel, Guild, GuildMemberRemoveEvent, Intents, Member, Message, MessageDeleteEvent, ReadyEvent, UnavailableGuild,
+    Channel, Guild, GuildBanEvent, GuildMemberRemoveEvent, GuildMembersChunkEvent, GuildRoleDeleteEvent,
+    GuildRoleEvent, Intents, Member, Message, MessageDeleteBulkEvent, MessageDeleteEvent, MessageReactionAddEvent,
+    MessageReactionRemoveEvent, ReadyEvent, Role, ThreadDeleteEvent, ThreadListSyncEvent, ThreadMemberUpdateEvent,
+    ThreadMembersUpdateEvent, UnavailableGuild, WebhooksUpdateEvent,
 };
 
 macro_rules! event {
@@ -21,6 +24,69 @@ macro_rules! event {
 }
 
 const MESSAGES: Intents = Intents::GUILD_MESSAGES.union(Intents::DIRECT_MESSAGES);
+const REACTIONS: Intents = Intents::GUILD_MESSAGE_REACTIONS.union(Intents::DIRECT_MESSAGE_REACTIONS);
+
+event!(
+    /// Several messages were deleted at once.
+    MessageDeleteBulk, "MESSAGE_DELETE_BULK", Intents::GUILD_MESSAGES, Bound<MessageDeleteBulkEvent>
+);
+event!(
+    /// Someone added a reaction. The cached message's reaction list does not follow.
+    MessageReactionAdd, "MESSAGE_REACTION_ADD", REACTIONS, Bound<MessageReactionAddEvent>
+);
+event!(
+    /// Someone removed a reaction. The cached message's reaction list does not follow.
+    MessageReactionRemove, "MESSAGE_REACTION_REMOVE", REACTIONS, Bound<MessageReactionRemoveEvent>
+);
+event!(
+    /// A user was banned.
+    GuildBanAdd, "GUILD_BAN_ADD", Intents::GUILD_MODERATION, Bound<GuildBanEvent>
+);
+event!(
+    /// A ban was lifted.
+    GuildBanRemove, "GUILD_BAN_REMOVE", Intents::GUILD_MODERATION, Bound<GuildBanEvent>
+);
+event!(
+    /// A role was created.
+    GuildRoleCreate, "GUILD_ROLE_CREATE", Intents::GUILDS, Bound<GuildRoleEvent>
+);
+event!(
+    /// A role was edited.
+    GuildRoleUpdate, "GUILD_ROLE_UPDATE", Intents::GUILDS, Bound<GuildRoleEvent>
+);
+event!(
+    /// A role was deleted. `cached` is the role as it was, if the cache had it.
+    GuildRoleDelete, "GUILD_ROLE_DELETE", Intents::GUILDS, Deleted<GuildRoleDeleteEvent, Role>
+);
+event!(
+    /// A thread was created, or the bot was added to a private thread.
+    ThreadCreate, "THREAD_CREATE", Intents::GUILDS, Bound<Channel>
+);
+event!(
+    /// A thread was edited, archived or unarchived.
+    ThreadUpdate, "THREAD_UPDATE", Intents::GUILDS, Updated<Channel>
+);
+event!(
+    /// A thread was deleted. `cached` is the thread as it was, if the cache had it.
+    ThreadDelete, "THREAD_DELETE", Intents::GUILDS, Deleted<ThreadDeleteEvent, Channel>
+);
+event!(
+    /// The bot gained access to channels and receives their active threads.
+    ThreadListSync, "THREAD_LIST_SYNC", Intents::GUILDS, Bound<ThreadListSyncEvent>
+);
+event!(
+    /// The bot's membership of a thread changed.
+    ThreadMemberUpdate, "THREAD_MEMBER_UPDATE", Intents::GUILDS, Bound<ThreadMemberUpdateEvent>
+);
+event!(
+    /// People joined or left a thread. Members other than the bot need `GUILD_MEMBERS`.
+    ThreadMembersUpdate, "THREAD_MEMBERS_UPDATE", Intents::GUILDS.union(Intents::GUILD_MEMBERS),
+    Bound<ThreadMembersUpdateEvent>
+);
+event!(
+    /// A webhook of a channel was created, edited or deleted.
+    WebhooksUpdate, "WEBHOOKS_UPDATE", Intents::GUILD_WEBHOOKS, Bound<WebhooksUpdateEvent>
+);
 
 event!(
     /// The client is ready: once per start, after the guild list finished.
@@ -78,4 +144,10 @@ event!(
 event!(
     /// An interaction arrived. Runs after any routed handler from `on_command` and the like.
     InteractionCreate, "INTERACTION_CREATE", Intents::empty(), Interaction
+);
+
+event!(
+    /// A part of the answer to a request for guild members, such as `members().fetch_all()`. The
+    /// members are in the cache before handlers run.
+    GuildMembersChunk, "GUILD_MEMBERS_CHUNK", Intents::empty(), Bound<GuildMembersChunkEvent>
 );

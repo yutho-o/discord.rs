@@ -3,7 +3,7 @@
 //! Changed: translated to Rust; absent versus null kept through `Patch`, `ARCHITECTURE.md` 7.4.
 //!
 //! Connections and application role connections from the same upstream file belong to OAuth2, which
-//! the proof of concept cuts.
+//! are not ported yet.
 
 use crate::{GenericId, GuildId, UserFlags, UserId};
 use dr_core::{Patch, open_str};

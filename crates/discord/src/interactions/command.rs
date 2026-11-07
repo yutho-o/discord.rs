@@ -8,7 +8,7 @@ use dr_builders::{CreateMessage, EditMessage, ModalBuilder};
 use dr_core::Secret;
 use dr_model::{
     ApplicationCommandType, ApplicationId, ChannelId, CommandId, GuildId, InteractionId, InteractionOption, Member,
-    Message, ResolvedData, User,
+    Message, Permissions, ResolvedData, User,
 };
 use std::sync::Arc;
 
@@ -45,6 +45,15 @@ pub struct CommandInteraction {
 }
 
 impl Bound<CommandInteraction> {
+    /// Whether the person who used the command holds all of these permissions in this channel. False
+    /// in a DM, and whenever Discord sent no permissions, so a check built on this fails closed.
+    ///
+    /// Handlers that act with the bot's powers, such as a ban, must check this: Discord's
+    /// `default_member_permissions` is only a default, which server admins can change.
+    pub fn has_permissions(&self, needed: Permissions) -> bool {
+        self.member.as_ref().and_then(|m| m.permissions).is_some_and(|held| held.contains(needed))
+    }
+
     /// Typed reads of the options.
     pub fn options(&self) -> CommandOptions<'_> {
         CommandOptions(self.data())

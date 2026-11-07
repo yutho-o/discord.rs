@@ -177,7 +177,7 @@ fn deprecated_flag_names_are_the_same_bit_and_debug_prints_the_current_one() {
 }
 
 #[test]
-fn intents_of_the_poc_bot() {
+fn intents_of_the_basic_bot() {
     let intents = Intents::GUILDS | Intents::GUILD_MESSAGES | Intents::MESSAGE_CONTENT;
     assert_eq!(intents.bits(), 1 | (1 << 9) | (1 << 15));
 }

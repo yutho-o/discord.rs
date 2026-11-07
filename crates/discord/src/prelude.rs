@@ -6,10 +6,15 @@ pub use crate::{
     Bound, BoxError, Client, ClientBuilder, Context, Deleted, Error, GatewayEvent, HandlerResult, ShutdownMode, Updated,
 };
 pub use dr_builders::{
-    ActionRowBuilder, ButtonBuilder, CreateMessage, EditMessage, EmbedBuilder, MessageContextCommand, ModalBuilder,
+    ActionRowBuilder, BulkDeleteMessages, ButtonBuilder, ChannelPosition, CreateAttachment, CreateBan, CreateChannel,
+    CreateForumPost, CreateMessage, CreateRole, CreateThread, CreateWebhook, EditChannel, EditMember, EditMessage,
+    EditRole, EditWebhook, EmbedBuilder, ExecuteWebhook, ImageData, MessageContextCommand, ModalBuilder,
     SlashCommandBuilder, StringSelectBuilder, Subcommand, TextInputBuilder, UserContextCommand, commands,
 };
 pub use dr_cache::CacheConfig;
 pub use dr_model::{
-    ChannelId, ChannelType, GuildId, Intents, JsonErrorCode, Message, MessageId, Permissions, RoleId, UserId,
+    Activity, Channel, ChannelId, ChannelType, GuildBan, GuildId, Intents, JsonErrorCode, Member, Message, MessageId,
+    PermissionOverwrite, Permissions, PresenceStatus, RequestGuildMembers, Role, RoleId, UpdatePresence, UserId,
+    Webhook, WebhookId,
 };
+pub use dr_rest::api::{ArchivedThreadPage, MessagePage, ThreadMemberPage, UserPage};

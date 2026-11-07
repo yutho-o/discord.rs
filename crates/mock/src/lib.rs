@@ -12,7 +12,7 @@ pub mod world;
 pub use axum::http::Method;
 pub use fault::Fault;
 pub use gateway::{GatewayScript, RecordedFrame};
-pub use rest::{RecordedRequest, RestRule, RestScript};
+pub use rest::{FormPart, RecordedRequest, RestRule, RestScript};
 pub use world::{World, WorldEvent};
 
 use dr_core::Endpoints;

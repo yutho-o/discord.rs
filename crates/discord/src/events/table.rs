@@ -76,4 +76,5 @@ pub async fn fire<E: GatewayEvent>(client: &Client, shard: u32, payload: E::Payl
     for handler in client.0.handlers.handlers::<E>() {
         spawn_handler(client, lane, E::NAME, shard, handler.clone(), payload.clone()).await;
     }
+    client.0.collectors.offer::<E>(&payload);
 }

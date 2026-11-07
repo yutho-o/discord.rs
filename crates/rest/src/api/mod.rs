@@ -8,10 +8,12 @@ pub mod gateway;
 pub mod guilds;
 pub mod interactions;
 pub mod users;
+pub mod webhooks;
 
 pub use application_commands::ApplicationCommandsApi;
-pub use channels::ChannelsApi;
+pub use channels::{ArchivedThreadPage, ChannelsApi, MessagePage, ThreadMemberPage};
 pub use gateway::GatewayApi;
-pub use guilds::GuildsApi;
+pub use guilds::{GuildsApi, UserPage};
 pub use interactions::InteractionsApi;
 pub use users::UsersApi;
+pub use webhooks::{ExecuteQuery, WebhooksApi};

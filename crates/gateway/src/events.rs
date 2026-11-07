@@ -135,6 +135,8 @@ pub enum ShutdownMode {
 pub enum GatewayCommand {
     /// Op 3.
     UpdatePresence(UpdatePresence),
+    /// Op 8, answered by `GUILD_MEMBERS_CHUNK` events. Send it on the guild's shard.
+    RequestGuildMembers(dr_model::RequestGuildMembers),
     /// Any other opcode. The 4096 byte limit still applies.
     Raw {
         /// The opcode.

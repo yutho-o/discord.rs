@@ -3,7 +3,7 @@
 use crate::store::GuildSlot;
 use crate::{Cache, Change};
 use dr_core::Patch;
-use dr_model::{GuildId, GuildMemberRemoveEvent, GuildMemberUpdateEvent, Member};
+use dr_model::{GuildId, GuildMemberRemoveEvent, GuildMemberUpdateEvent, GuildMembersChunkEvent, Member};
 use std::sync::Arc;
 
 /// Applies a three-state field: absent keeps, null clears, a value replaces.
@@ -28,6 +28,25 @@ impl Cache {
             }
         }
         member
+    }
+
+    /// `GUILD_MEMBERS_CHUNK`: stores each member under the policy, and sets `guild_id` on each, also
+    /// with no cache.
+    pub fn apply_members_chunk(&self, shard: u32, mut event: GuildMembersChunkEvent) -> GuildMembersChunkEvent {
+        let _ = shard;
+        let guild = event.guild_id;
+        if self.config.is_enabled() {
+            let slot = self.slot(guild);
+            for member in &mut event.members {
+                let stored = self.store_member(&slot, guild, std::mem::take(member));
+                *member = Member::clone(&stored);
+            }
+        } else {
+            for member in &mut event.members {
+                member.guild_id = Some(guild);
+            }
+        }
+        event
     }
 
     /// `GUILD_MEMBER_ADD`. The event body has `guild_id`, and the returned member keeps it.

@@ -1,7 +1,7 @@
-//! The proof-of-concept bot: `!ping`, `/ping`, `/echo`, `/vote` with buttons, and `/whoami`.
+//! A small bot: `!ping`, `/ping`, `/echo`, `/vote` with buttons, and `/whoami`.
 //!
 //! Set `DISCORD_TOKEN`, and `DISCORD_GUILD_ID` to register commands in one guild, where they appear at
-//! once. Run with `cargo run -p discord-rust --example poc_bot`.
+//! once. Run with `cargo run -p discord-rust --example basic_bot`.
 
 use discord::prelude::*;
 use std::collections::HashMap;

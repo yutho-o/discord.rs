@@ -235,6 +235,7 @@ dependencies = [
 name = "discord-rust-builders"
 version = "0.1.0-alpha.0"
 dependencies = [
+ "bytes",
  "discord-rust-core",
  "discord-rust-model",
  "serde",

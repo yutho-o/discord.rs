@@ -1,7 +1,7 @@
 //! Channel events.
 
 use crate::{Cache, Change};
-use dr_model::Channel;
+use dr_model::{Channel, ThreadListSyncEvent};
 use std::sync::Arc;
 
 impl Cache {
@@ -38,5 +38,27 @@ impl Cache {
             self.dm_order.lock().retain(|id| *id != channel.id);
         }
         self.channels.remove(&channel.id)
+    }
+
+    /// `THREAD_LIST_SYNC`. Drops the cached threads of the synced channels, or of the whole guild when
+    /// the event names none, then stores the threads it lists.
+    pub fn apply_thread_list_sync(&self, shard: u32, event: &ThreadListSyncEvent) {
+        if !self.config.is_enabled() {
+            return;
+        }
+        let synced = |parent: Option<dr_model::ChannelId>| match &event.channel_ids {
+            None => true,
+            Some(ids) => parent.is_some_and(|p| ids.contains(&p)),
+        };
+        let stale: Vec<Arc<Channel>> =
+            self.guild_channels(event.guild_id).into_iter().filter(|c| c.is_thread() && synced(c.parent_id)).collect();
+        for thread in stale {
+            self.apply_channel_delete(shard, (*thread).clone());
+        }
+        for thread in &event.threads {
+            let mut thread = thread.clone();
+            thread.guild_id.get_or_insert(event.guild_id);
+            self.store_channel(Arc::new(thread));
+        }
     }
 }

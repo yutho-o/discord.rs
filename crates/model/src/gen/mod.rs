@@ -1,4 +1,4 @@
-//! Plain wire data, in the layout the generator will fill. Hand-written for the proof of concept
+//! Plain wire data, in the layout the generator will fill. Hand-written for now
 //! and checked field by field against `payloads/v10` of discord-api-types.
 
 pub mod enums;

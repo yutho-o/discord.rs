@@ -1,7 +1,8 @@
 //! `CreateMessage`, the body of a new message or an interaction reply.
 
-use crate::{ActionRowBuilder, AllowedMentions, EmbedBuilder, check_len, nested};
-use dr_core::{BodyError, IntoBody, RequestBody, ValidationError};
+use crate::attachment::{AttachmentRef, validate_files};
+use crate::{ActionRowBuilder, AllowedMentions, CreateAttachment, EmbedBuilder, check_len, nested};
+use dr_core::{BodyError, FileUpload, IntoBody, RequestBody, ValidationError};
 use dr_model::{MessageFlags, MessageId, MessageReference, Nonce};
 use serde::Serialize;
 
@@ -28,6 +29,10 @@ pub struct CreateMessage {
     nonce: Option<Nonce>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     enforce_nonce: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    attachments: Vec<AttachmentRef>,
+    #[serde(skip)]
+    files: Vec<CreateAttachment>,
     #[serde(skip)]
     skip_validation: bool,
 }
@@ -51,6 +56,17 @@ impl CreateMessage {
     pub fn row(mut self, r: ActionRowBuilder) -> Self {
         self.components.push(r);
         self
+    }
+    /// Uploads a file with the message, at most 10.
+    pub fn attach(mut self, file: CreateAttachment) -> Self {
+        self.attachments.push(file.reference(self.files.len()));
+        self.files.push(file);
+        self
+    }
+    /// The files to upload, in the order of `files[i]`. Code that wraps this body in another one,
+    /// such as an interaction callback, sends these with it.
+    pub fn uploads(&self) -> Vec<FileUpload> {
+        self.files.iter().map(CreateAttachment::upload).collect()
     }
     /// Sets who may be pinged.
     pub fn allowed_mentions(mut self, m: AllowedMentions) -> Self {
@@ -100,8 +116,8 @@ impl CreateMessage {
         self.skip_validation = true;
         self
     }
-    /// Checks the limits of `[types 4.3]`: at least one of content, embeds or components, content
-    /// at most 2000 code points, at most 10 embeds, at most 5 rows, and each embed and row itself.
+    /// Checks the limits of `[types 4.3]`: at least one of content, embeds, components or files, content
+    /// at most 2000 code points, at most 10 embeds, at most 5 rows, at most 10 files, and each embed, row and file itself.
     /// Interaction replies call this directly, since they wrap the body themselves. It does nothing
     /// after [`Self::skip_validation`].
     pub fn validate(&self) -> Result<(), ValidationError> {
@@ -109,9 +125,10 @@ impl CreateMessage {
             return Ok(());
         }
         let content = self.content.as_deref().unwrap_or_default();
-        if content.is_empty() && self.embeds.is_empty() && self.components.is_empty() {
-            return Err(ValidationError::new("", "a message needs content, an embed or a component"));
+        if content.is_empty() && self.embeds.is_empty() && self.components.is_empty() && self.files.is_empty() {
+            return Err(ValidationError::new("", "a message needs content, an embed, a component or a file"));
         }
+        validate_files(&self.files)?;
         check_len("content", content, 0, 2000)?;
         if self.embeds.len() > 10 {
             return Err(ValidationError::new("embeds", "must hold at most 10 embeds"));
@@ -148,6 +165,11 @@ impl From<&String> for CreateMessage {
         Self::new().content(s)
     }
 }
+impl From<CreateAttachment> for CreateMessage {
+    fn from(file: CreateAttachment) -> Self {
+        Self::new().attach(file)
+    }
+}
 impl From<EmbedBuilder> for CreateMessage {
     fn from(e: EmbedBuilder) -> Self {
         Self::new().embed(e)
@@ -157,6 +179,6 @@ impl From<EmbedBuilder> for CreateMessage {
 impl IntoBody for CreateMessage {
     fn into_body(self) -> Result<RequestBody, BodyError> {
         self.validate()?;
-        RequestBody::json(&self)
+        Ok(RequestBody::json(&self)?.with_files(self.uploads()))
     }
 }

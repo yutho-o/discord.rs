@@ -5,7 +5,7 @@
 //! The socket task owns the WebSocket and the timers. It never decodes a payload body and never
 //! waits on anything downstream, so a slow handler cannot delay a heartbeat.
 //!
-//! The proof of concept runs one shard, `[0, 1]`.
+//! The client runs one shard for now, `[0, 1]`.
 
 pub mod compress;
 pub mod connector;
@@ -21,9 +21,9 @@ pub use compress::{Compression, Decompressor};
 pub use error::GatewayError;
 pub use events::{Flow, Frame, FrameSink, GatewayCommand, ShardNotice, ShardStatus, ShutdownMode};
 pub use info::{GatewayInfo, GatewayInfoProvider};
-pub use manager::{ShardManager, ShardManagerBuilder, ShardsHandle};
+pub use manager::{ShardManager, ShardManagerBuilder, ShardPlan, ShardsHandle, shard_for};
 pub use session::{MemorySessionStore, SessionInfo, SessionStore};
-pub use shard::{ShardHandle, ShardOptions};
+pub use shard::{IdentifyLimiter, ShardHandle, ShardOptions};
 
 const _: fn() = || {
     fn assert_send_sync<T: Send + Sync>() {}

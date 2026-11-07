@@ -1,4 +1,4 @@
-//! Session persistence. The proof of concept ships only the in-memory store.
+//! Session persistence. Only the in-memory store exists so far.
 
 use dr_core::Secret;
 use futures::future::BoxFuture;

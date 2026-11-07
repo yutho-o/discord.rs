@@ -5,13 +5,15 @@ use crate::{Cache, Change};
 use dr_model::{Guild, UnavailableGuild};
 use std::sync::Arc;
 
-/// A copy of a guild with its three lists left out, without cloning them.
+/// A copy of a guild with its four lists left out, without cloning them.
 fn stored_form(guild: &mut Guild) -> Guild {
     let channels = std::mem::take(&mut guild.channels);
+    let threads = std::mem::take(&mut guild.threads);
     let members = std::mem::take(&mut guild.members);
     let roles = std::mem::take(&mut guild.roles);
     let stored = guild.clone();
     guild.channels = channels;
+    guild.threads = threads;
     guild.members = members;
     guild.roles = roles;
     stored
@@ -32,13 +34,14 @@ impl Cache {
         // exists keeps its messages.
         if let Some(previous) = self.guilds.insert(id, slot.clone()) {
             for channel in previous.channels.snapshot() {
-                if !guild.channels.iter().any(|c| c.id == channel.id) {
+                let kept = guild.channels.iter().chain(&guild.threads).any(|c| c.id == channel.id);
+                if !kept {
                     self.channels.remove(&channel.id);
                     self.messages.remove(&channel.id);
                 }
             }
         }
-        for channel in &guild.channels {
+        for channel in guild.channels.iter().chain(&guild.threads) {
             let mut channel = channel.clone();
             // Discord leaves this out of the channels nested in a guild.
             channel.guild_id = Some(id);

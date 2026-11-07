@@ -75,7 +75,15 @@ impl Cache {
             | DispatchKind::GuildMemberRemove
             | DispatchKind::MessageCreate
             | DispatchKind::MessageUpdate
-            | DispatchKind::MessageDelete => self.config.is_enabled(),
+            | DispatchKind::MessageDelete
+            | DispatchKind::MessageDeleteBulk
+            | DispatchKind::GuildRoleCreate
+            | DispatchKind::GuildRoleUpdate
+            | DispatchKind::GuildRoleDelete
+            | DispatchKind::ThreadCreate
+            | DispatchKind::ThreadUpdate
+            | DispatchKind::ThreadDelete
+            | DispatchKind::ThreadListSync => self.config.is_enabled(),
             _ => false,
         }
     }

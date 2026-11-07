@@ -1,9 +1,10 @@
 //! `EditMessage`. A separate type from `CreateMessage`, so a PATCH writes only what was asked for:
 //! the trap of `[types 9.5]`.
 
-use crate::{ActionRowBuilder, AllowedMentions, EmbedBuilder, check_len, nested};
-use dr_core::{BodyError, IntoBody, Patch, RequestBody, ValidationError};
-use dr_model::MessageFlags;
+use crate::attachment::{AttachmentRef, validate_files};
+use crate::{ActionRowBuilder, AllowedMentions, CreateAttachment, EmbedBuilder, check_len, nested};
+use dr_core::{BodyError, FileUpload, IntoBody, Patch, RequestBody, ValidationError};
+use dr_model::{AttachmentId, MessageFlags};
 use serde::Serialize;
 
 /// The body of a message edit. A field that was not set stays out of the JSON and keeps its value
@@ -21,6 +22,10 @@ pub struct EditMessage {
     flags: Option<MessageFlags>,
     #[serde(skip_serializing_if = "Option::is_none")]
     allowed_mentions: Option<AllowedMentions>,
+    #[serde(skip_serializing_if = "Patch::is_absent")]
+    attachments: Patch<Vec<AttachmentRef>>,
+    #[serde(skip)]
+    files: Vec<CreateAttachment>,
     #[serde(skip)]
     skip_validation: bool,
 }
@@ -66,6 +71,36 @@ impl EditMessage {
         self.components = Patch::Value(Vec::new());
         self
     }
+    /// Uploads a file. The message keeps only the attachments this edit lists, so the old ones go
+    /// away unless [`Self::keep_attachment`] names them.
+    pub fn attach(mut self, file: CreateAttachment) -> Self {
+        let reference = file.reference(self.files.len());
+        self.push_attachment(reference);
+        self.files.push(file);
+        self
+    }
+    /// Keeps an attachment the message already has. Once an edit lists attachments, the others go.
+    pub fn keep_attachment(mut self, id: AttachmentId) -> Self {
+        self.push_attachment(AttachmentRef::Existing { id });
+        self
+    }
+    /// Removes every attachment: writes `"attachments": []`.
+    pub fn clear_attachments(mut self) -> Self {
+        self.attachments = Patch::Value(Vec::new());
+        self.files.clear();
+        self
+    }
+    fn push_attachment(&mut self, reference: AttachmentRef) {
+        match &mut self.attachments {
+            Patch::Value(list) => list.push(reference),
+            other => *other = Patch::Value(vec![reference]),
+        }
+    }
+    /// The files to upload, in the order of `files[i]`. Code that wraps this body in another one,
+    /// such as an interaction callback, sends these with it.
+    pub fn uploads(&self) -> Vec<FileUpload> {
+        self.files.iter().map(CreateAttachment::upload).collect()
+    }
     /// Sets the flags.
     pub fn flags(mut self, f: MessageFlags) -> Self {
         self.flags = Some(f);
@@ -110,6 +145,7 @@ impl EditMessage {
         for (i, r) in rows.iter().enumerate() {
             r.validate().map_err(|err| nested(format!("components[{i}]"), err))?;
         }
+        validate_files(&self.files)?;
         Ok(())
     }
 }
@@ -128,6 +164,6 @@ impl From<String> for EditMessage {
 impl IntoBody for EditMessage {
     fn into_body(self) -> Result<RequestBody, BodyError> {
         self.validate()?;
-        RequestBody::json(&self)
+        Ok(RequestBody::json(&self)?.with_files(self.uploads()))
     }
 }

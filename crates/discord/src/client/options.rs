@@ -65,6 +65,10 @@ pub struct ClientOptions {
     pub presence: Option<UpdatePresence>,
     /// Where sessions are kept. `None` means in memory.
     pub session_store: Option<Arc<dyn SessionStore>>,
+    /// The total number of shards. `None` means the count Discord recommends.
+    pub shard_count: Option<u32>,
+    /// The shards this process runs. `None` means all of them.
+    pub shard_ids: Option<Vec<u32>>,
     /// How long shutdown waits for the queue and handlers.
     pub shutdown_drain: Duration,
     /// Limits of the queue.
